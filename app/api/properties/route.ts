@@ -48,11 +48,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     const newProperty = await db.insert(properties).values({
+      propertyId: body.propertyId,
       name: body.name,
       address: body.address,
       city: body.city,
       state: body.state,
       zipCode: body.zipCode,
+      county: body.county,
       type: body.type || 'single_family',
       status: body.status || 'active',
       bedrooms: body.bedrooms,
@@ -60,11 +62,22 @@ export async function POST(request: NextRequest) {
       squareFeet: body.squareFeet,
       yearBuilt: body.yearBuilt,
       monthlyRent: body.monthlyRent,
+      market: body.market,
+      owner: body.owner,
       propertyManagerId: body.propertyManagerId,
       seniorPropertyManagerId: body.seniorPropertyManagerId,
       isCore: body.isCore !== undefined ? body.isCore : true,
+      inDisposition: body.inDisposition || false,
+      section8: body.section8 || false,
+      insurance: body.insurance !== undefined ? body.insurance : true,
+      squatters: body.squatters || false,
+      ownership: body.ownership !== undefined ? body.ownership : true,
+      moveInDate: body.moveInDate,
+      moveOutDate: body.moveOutDate,
       utilities: body.utilities || { power: false, water: false, gas: false },
+      images: body.images || [],
       notes: body.notes,
+      color: body.color || (body.isCore ? 7 : 11),
     }).returning();
     
     return NextResponse.json(newProperty[0], { status: 201 });

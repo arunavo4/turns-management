@@ -56,21 +56,33 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/lib/mock-data";
+import AddPropertyModal from "@/components/properties/add-property-modal";
 
 interface Property {
   id: string;
+  propertyId?: string;
   name: string;
   address: string;
   city: string;
   state: string;
   zipCode: string;
+  county?: string;
   type: string;
   status: string;
   bedrooms: number;
   bathrooms: string;
   squareFeet: number;
+  yearBuilt?: number;
   monthlyRent: string;
+  market?: string;
+  owner?: string;
   isCore: boolean;
+  inDisposition?: boolean;
+  section8?: boolean;
+  insurance?: boolean;
+  squatters?: boolean;
+  ownership?: boolean;
+  color?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -198,10 +210,7 @@ export default function PropertiesPage() {
               Manage your property portfolio
             </p>
           </div>
-          <Button className="flex items-center gap-2">
-            <IconPlus className="h-4 w-4" />
-            Add Property
-          </Button>
+          <AddPropertyModal onPropertyAdded={fetchProperties} />
         </div>
 
         {/* Filters and View Toggle */}
@@ -270,7 +279,14 @@ export default function PropertiesPage() {
         {viewMode === "grid" ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredProperties.map((property) => (
-              <Card key={property.id} className="hover:shadow-lg transition-shadow">
+              <Card 
+                key={property.id} 
+                className={`hover:shadow-lg transition-shadow ${
+                  property.isCore 
+                    ? 'border-l-4 border-l-green-500' 
+                    : 'border-l-4 border-l-orange-500'
+                }`}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
@@ -334,9 +350,23 @@ export default function PropertiesPage() {
                       {formatCurrency(parseFloat(property.monthlyRent))}/mo
                     </div>
                   </div>
-                  {property.isCore && (
-                    <Badge variant="secondary">Core Property</Badge>
-                  )}
+                  <div className="flex flex-wrap gap-1">
+                    {property.isCore && (
+                      <Badge variant="secondary" className="text-xs">Core</Badge>
+                    )}
+                    {property.section8 && (
+                      <Badge variant="outline" className="text-xs">Section 8</Badge>
+                    )}
+                    {property.insurance && (
+                      <Badge variant="outline" className="text-xs">Insured</Badge>
+                    )}
+                    {property.squatters && (
+                      <Badge variant="destructive" className="text-xs">Squatters</Badge>
+                    )}
+                    {property.inDisposition && (
+                      <Badge variant="destructive" className="text-xs">In Disposition</Badge>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}

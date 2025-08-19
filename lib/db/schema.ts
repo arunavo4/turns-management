@@ -80,31 +80,53 @@ export const users = pgTable('app_users', {
 export const sessions = session;
 export const accounts = account;
 
+// Property Types table
+export const propertyTypes = pgTable('property_types', {
+  ...baseColumns,
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  description: text('description'),
+  isActive: boolean('is_active').default(true)
+});
+
 // Properties table
 export const properties = pgTable('properties', {
   ...baseColumns,
+  propertyId: varchar('property_id', { length: 100 }).notNull().unique(), // Unique property identifier
   name: varchar('name', { length: 255 }).notNull(),
   address: varchar('address', { length: 500 }).notNull(),
   city: varchar('city', { length: 100 }),
   state: varchar('state', { length: 50 }),
   zipCode: varchar('zip_code', { length: 10 }),
+  county: varchar('county', { length: 100 }), // County information
   type: propertyTypeEnum('type').default('single_family'),
+  propertyTypeId: uuid('property_type_id').references(() => propertyTypes.id), // Reference to property types
   status: propertyStatusEnum('status').default('active'),
   bedrooms: integer('bedrooms'),
   bathrooms: decimal('bathrooms', { precision: 3, scale: 1 }),
   squareFeet: integer('square_feet'),
   yearBuilt: integer('year_built'),
   monthlyRent: decimal('monthly_rent', { precision: 10, scale: 2 }),
+  market: varchar('market', { length: 100 }), // Market area
+  owner: varchar('owner', { length: 255 }), // Property owner
   propertyManagerId: text('property_manager_id').references(() => users.id),
   seniorPropertyManagerId: text('senior_property_manager_id').references(() => users.id),
   isCore: boolean('is_core').default(true),
+  inDisposition: boolean('in_disposition').default(false), // Property disposal status
+  section8: boolean('section_8').default(false), // Section 8 eligibility
+  insurance: boolean('insurance').default(false), // Insurance status
+  squatters: boolean('squatters').default(false), // Squatter status
+  ownership: boolean('ownership').default(true), // Ownership status
+  moveInDate: timestamp('move_in_date'), // Move-in date
+  moveOutDate: timestamp('move_out_date'), // Move-out date
   lastTurnDate: timestamp('last_turn_date'),
   utilities: jsonb('utilities').default({
     power: false,
     water: false,
     gas: false
   }),
-  notes: text('notes')
+  images: jsonb('images').default([]), // Array of image URLs
+  notes: text('notes'),
+  color: integer('color').default(7) // Color coding for UI (7=green for core, 11=orange for non-core)
 });
 
 // Vendors table

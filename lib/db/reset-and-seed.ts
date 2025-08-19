@@ -4,7 +4,8 @@ dotenv.config({ path: '.env.local' });
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
-import { users, properties, vendors, turnStages, turns } from './schema';
+import { sql } from 'drizzle-orm';
+import { users, properties, vendors, turnStages, turns, propertyTypes } from './schema';
 import { user } from './auth-schema';
 
 const pool = new Pool({
@@ -15,10 +16,24 @@ const pool = new Pool({
 });
 const db = drizzle(pool, { schema });
 
-async function seed() {
-  console.log('🌱 Starting database seed...');
+async function resetAndSeed() {
+  console.log('🌱 Resetting and seeding database...');
 
   try {
+    // Truncate all tables in the correct order (respecting foreign key constraints)
+    console.log('📦 Truncating tables...');
+    await db.execute(sql`TRUNCATE TABLE turns CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE turn_stages CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE vendors CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE properties CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE property_types CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE app_users CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE account CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE session CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE verification CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE "user" CASCADE`);
+    console.log('✅ Tables truncated');
+
     // Create auth users first
     const [authAdminUser] = await db.insert(user).values({
       id: 'admin-user-id',
@@ -49,6 +64,18 @@ async function seed() {
 
     console.log('✅ Users created');
 
+    // Create property types
+    const propertyTypesData = await db.insert(propertyTypes).values([
+      { name: 'Single Family', description: 'Single family home' },
+      { name: 'Multi Family', description: 'Multi-family dwelling' },
+      { name: 'Apartment', description: 'Apartment unit' },
+      { name: 'Condo', description: 'Condominium' },
+      { name: 'Townhouse', description: 'Townhouse unit' },
+      { name: 'Commercial', description: 'Commercial property' },
+    ]).returning();
+
+    console.log('✅ Property types created');
+
     // Create turn stages
     const stages = await db.insert(turnStages).values([
       { name: 'Draft', sequence: 1, description: 'Initial draft stage' },
@@ -73,6 +100,7 @@ async function seed() {
         zipCode: '75201',
         county: 'Dallas County',
         type: 'apartment',
+        propertyTypeId: propertyTypesData[2].id, // Apartment
         status: 'active',
         bedrooms: 2,
         bathrooms: '2',
@@ -88,6 +116,7 @@ async function seed() {
         squatters: false,
         ownership: true,
         inDisposition: false,
+        color: 7, // Green for core
       },
       {
         propertyId: 'PROP-002',
@@ -98,6 +127,7 @@ async function seed() {
         zipCode: '78701',
         county: 'Travis County',
         type: 'single_family',
+        propertyTypeId: propertyTypesData[0].id, // Single Family
         status: 'pending_turn',
         bedrooms: 3,
         bathrooms: '2.5',
@@ -113,6 +143,7 @@ async function seed() {
         squatters: false,
         ownership: true,
         inDisposition: false,
+        color: 7, // Green for core
       },
       {
         propertyId: 'PROP-003',
@@ -123,6 +154,7 @@ async function seed() {
         zipCode: '77001',
         county: 'Harris County',
         type: 'condo',
+        propertyTypeId: propertyTypesData[3].id, // Condo
         status: 'occupied',
         bedrooms: 1,
         bathrooms: '1',
@@ -138,6 +170,7 @@ async function seed() {
         squatters: false,
         ownership: true,
         inDisposition: false,
+        color: 11, // Orange for non-core
       },
     ]).returning();
 
@@ -160,89 +193,63 @@ async function seed() {
         rating: '4.5',
       },
       {
-        companyName: 'Premium Flooring Co',
-        contactName: 'Sarah Johnson',
-        email: 'sarah@premiumfloor.com',
+        companyName: 'Pro Painting Services',
+        contactName: 'Maria Garcia',
+        email: 'maria@propaint.com',
         phone: '512-555-0200',
-        address: '200 Floor Street',
+        address: '200 Color Way',
         city: 'Austin',
         state: 'TX',
         zipCode: '78702',
-        specialties: ['flooring', 'carpeting'],
-        isApproved: true,
-        isActive: true,
-        rating: '4.8',
-      },
-      {
-        companyName: 'Elite Painting Services',
-        contactName: 'Mike Wilson',
-        email: 'mike@elitepainting.com',
-        phone: '713-555-0300',
-        address: '300 Color Way',
-        city: 'Houston',
-        state: 'TX',
-        zipCode: '77002',
         specialties: ['painting', 'drywall'],
         isApproved: true,
         isActive: true,
-        rating: '4.2',
+        rating: '4.8',
       },
     ]).returning();
 
     console.log('✅ Vendors created');
 
-    // Create turns
-    await db.insert(turns).values([
+    // Create sample turns
+    const turnsData = await db.insert(turns).values([
       {
         turnNumber: 'TURN-2024-001',
-        propertyId: propertiesData[1].id, // Pine Grove House
-        status: 'in_progress',
-        priority: 'high',
-        stageId: stages[5].id, // In Progress
-        moveOutDate: new Date('2024-01-15'),
-        turnAssignmentDate: new Date('2024-01-16'),
-        turnDueDate: new Date('2024-01-30'),
+        propertyId: propertiesData[0].id,
+        stageId: stages[2].id, // Inspection
+        priority: 'medium',
+        estimatedCost: '5000',
+        actualCost: null,
         vendorId: vendorsData[0].id,
-        estimatedCost: '3500',
-        scopeOfWork: 'Full paint, carpet replacement, appliance check',
-        completionRate: 65,
-        powerStatus: true,
-        waterStatus: true,
-        gasStatus: true,
+        inspectorId: pmUser.id,
+        startDate: new Date('2024-01-15'),
+        estimatedEndDate: new Date('2024-01-30'),
+        actualEndDate: null,
+        isActive: true,
       },
       {
         turnNumber: 'TURN-2024-002',
-        propertyId: propertiesData[0].id, // Oakwood Apartments
-        status: 'vendor_assigned',
-        priority: 'medium',
-        stageId: stages[4].id, // Vendor Assigned
-        moveOutDate: new Date('2024-01-20'),
-        turnAssignmentDate: new Date('2024-01-21'),
-        turnDueDate: new Date('2024-02-05'),
-        vendorId: vendorsData[1].id,
-        estimatedCost: '2800',
-        scopeOfWork: 'Deep clean, minor repairs, touch-up paint',
-        completionRate: 30,
-        powerStatus: true,
-        waterStatus: true,
-        gasStatus: false,
+        propertyId: propertiesData[1].id,
+        stageId: stages[0].id, // Draft
+        priority: 'high',
+        estimatedCost: '8000',
+        actualCost: null,
+        vendorId: null,
+        inspectorId: null,
+        startDate: new Date('2024-01-20'),
+        estimatedEndDate: new Date('2024-02-10'),
+        actualEndDate: null,
+        isActive: true,
       },
-    ]);
+    ]).returning();
 
     console.log('✅ Turns created');
-    console.log('🎉 Database seeded successfully!');
-
+    
+    console.log('✨ Database reset and seeded successfully!');
+    process.exit(0);
   } catch (error) {
-    console.error('❌ Error seeding database:', error);
-    throw error;
-  } finally {
-    // Close the connection pool
-    await pool.end();
+    console.error('❌ Error resetting and seeding database:', error);
+    process.exit(1);
   }
 }
 
-// Run the seed function
-seed().catch((err) => {
-  console.error('Seed failed:', err);
-  process.exit(1);
-});
+resetAndSeed();
