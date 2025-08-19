@@ -1,8 +1,8 @@
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 import * as schema from './schema';
 
-// Create the connection only if DATABASE_URL exists
+// Create the connection pool only if DATABASE_URL exists
 // During build time, this might not be available
 const getDatabaseConnection = () => {
   const databaseUrl = process.env.DATABASE_URL;
@@ -14,14 +14,19 @@ const getDatabaseConnection = () => {
     return null;
   }
   
-  return neon(databaseUrl);
+  return new Pool({
+    connectionString: databaseUrl,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
 };
 
-const sql = getDatabaseConnection();
+const pool = getDatabaseConnection();
 
 // Create the drizzle instance
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const db = sql ? drizzle(sql, { schema }) : null as any;
+export const db = pool ? drizzle(pool, { schema }) : null as any;
 
 // Export schema for type inference
 export * from './schema';

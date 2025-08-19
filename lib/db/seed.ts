@@ -1,13 +1,18 @@
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 import * as schema from './schema';
 import { users, properties, vendors, turnStages, turns } from './schema';
 
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL!,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+const db = drizzle(pool, { schema });
 
 async function seed() {
   console.log('🌱 Starting database seed...');
@@ -186,6 +191,9 @@ async function seed() {
   } catch (error) {
     console.error('❌ Error seeding database:', error);
     throw error;
+  } finally {
+    // Close the connection pool
+    await pool.end();
   }
 }
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current Implementation Status
 ✅ **Working Features:**
-- Database connected (Neon Postgres)
+- Database connected (Azure PostgreSQL)
 - Authentication system (Better Auth)
 - Electric SQL configured
 - Full CRUD API routes for Properties, Turns, Vendors
@@ -40,7 +40,7 @@ This is a **local-first** property turns management application built with:
 - **Frontend**: Next.js 15 (App Router) with TypeScript
 - **Local Database**: PGlite (in-browser SQLite-compatible database)
 - **Sync Engine**: Electric SQL for real-time bidirectional sync
-- **Server Database**: Neon Postgres (serverless with branching)
+- **Server Database**: Azure PostgreSQL (managed PostgreSQL service)
 - **ORM**: Drizzle ORM (dual schemas for client and server)
 - **UI**: Tailwind CSS v4 + shadcn/ui components
 - **State Management**: Local database + Zustand for write queue
