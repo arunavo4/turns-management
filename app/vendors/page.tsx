@@ -9,17 +9,14 @@ import {
   IconPhone,
   IconMail,
   IconMapPin,
-  IconCalendar,
   IconTool,
   IconShield,
   IconEye,
   IconEdit,
   IconDots,
   IconUsers,
-  IconTrendingUp,
   IconClock,
   IconCurrencyDollar,
-  IconBadge,
   IconFileText,
   IconLayoutGrid,
   IconList,
@@ -27,7 +24,6 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -61,8 +57,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
   mockVendors, 
   formatCurrency, 
@@ -129,7 +124,6 @@ export default function VendorsPage() {
           <div className="flex items-start justify-between">
             <div className="flex items-start space-x-3">
               <Avatar className="h-12 w-12">
-                <AvatarImage src={`/vendor-${vendor.id}.jpg`} />
                 <AvatarFallback className="font-semibold">
                   {vendor.companyName.substring(0, 2).toUpperCase()}
                 </AvatarFallback>

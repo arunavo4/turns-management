@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconSearch,
@@ -10,17 +10,18 @@ import {
   IconBath,
   IconRuler,
   IconCurrencyDollar,
-  IconCalendar,
   IconPlus,
   IconLayoutGrid,
   IconList,
   IconEye,
   IconEdit,
+  IconTrash,
   IconDots,
   IconBuilding,
   IconHome2,
   IconBuildingSkyscraper,
   IconBuildingStore,
+  IconLoader2,
 } from "@tabler/icons-react";
 import {
   Card,
@@ -50,169 +51,151 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import { 
-  mockProperties, 
-  getStatusColor, 
-  formatCurrency, 
-  formatDate,
-  Property 
-} from "@/lib/mock-data";
+import { formatCurrency } from "@/lib/mock-data";
 
-type ViewMode = "grid" | "table";
+interface Property {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  type: string;
+  status: string;
+  bedrooms: number;
+  bathrooms: string;
+  squareFeet: number;
+  monthlyRent: string;
+  isCore: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function PropertiesPage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterType, setFilterType] = useState("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
 
-  const filteredProperties = mockProperties.filter((property) => {
-    const matchesSearch = property.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      property.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      property.city.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = filterStatus === "all" || property.status === filterStatus;
-    const matchesType = filterType === "all" || property.propertyType === filterType;
-    
-    return matchesSearch && matchesStatus && matchesType;
-  });
+  // Fetch properties from API
+  useEffect(() => {
+    fetchProperties();
+  }, []);
 
-  const getStatusBadge = (status: string) => {
-    const colorClass = getStatusColor(status);
-    return (
-      <Badge variant="secondary" className={colorClass}>
-        {status.replace('_', ' ').toUpperCase()}
-      </Badge>
-    );
-  };
-
-  const getPropertyTypeIcon = (type: string) => {
-    switch (type) {
-      case 'apartment':
-        return <IconBuilding className="h-4 w-4" />;
-      case 'house':
-        return <IconHome2 className="h-4 w-4" />;
-      case 'condo':
-        return <IconBuildingSkyscraper className="h-4 w-4" />;
-      case 'commercial':
-        return <IconBuildingStore className="h-4 w-4" />;
-      default:
-        return <IconHome className="h-4 w-4" />;
+  const fetchProperties = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/properties");
+      if (!response.ok) {
+        throw new Error("Failed to fetch properties");
+      }
+      const data = await response.json();
+      setProperties(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const PropertyCard = ({ property }: { property: Property }) => (
-    <Card className="group hover:shadow-md transition-shadow duration-200">
-      <CardContent className="p-6">
-        <div className="space-y-4">
-          {/* Header */}
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">
-                {property.name}
-              </h3>
-              <div className="flex items-center text-sm text-muted-foreground">
-                <IconMapPin className="mr-1 h-3 w-3" />
-                {property.address}, {property.city}, {property.state}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {getStatusBadge(property.status)}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <IconDots className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
-                    <IconEye className="mr-2 h-4 w-4" />
-                    View Details
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <IconEdit className="mr-2 h-4 w-4" />
-                    Edit Property
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this property?")) return;
 
-          {/* Property Details */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center text-sm">
-                {getPropertyTypeIcon(property.propertyType)}
-                <span className="ml-2 capitalize">{property.propertyType}</span>
-              </div>
-              {property.bedrooms && (
-                <div className="flex items-center text-sm">
-                  <IconBed className="h-4 w-4" />
-                  <span className="ml-2">{property.bedrooms} bed</span>
-                </div>
-              )}
-              {property.bathrooms && (
-                <div className="flex items-center text-sm">
-                  <IconBath className="h-4 w-4" />
-                  <span className="ml-2">{property.bathrooms} bath</span>
-                </div>
-              )}
-              <div className="flex items-center text-sm">
-                <IconRuler className="h-4 w-4" />
-                <span className="ml-2">{property.squareFeet.toLocaleString()} sq ft</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {property.monthlyRent && (
-                <div className="flex items-center text-sm">
-                  <IconCurrencyDollar className="h-4 w-4" />
-                  <span className="ml-2">{formatCurrency(property.monthlyRent)}/mo</span>
-                </div>
-              )}
-              {property.lastTurnDate && (
-                <div className="flex items-center text-sm">
-                  <IconCalendar className="h-4 w-4" />
-                  <span className="ml-2">Last turn: {formatDate(property.lastTurnDate)}</span>
-                </div>
-              )}
-            </div>
-          </div>
+    try {
+      const response = await fetch(`/api/properties/${id}`, {
+        method: "DELETE",
+      });
 
-          {/* Property Manager */}
-          <div className="border-t pt-4">
-            <div className="text-sm">
-              <span className="text-muted-foreground">Manager: </span>
-              <span className="font-medium">{property.propertyManager}</span>
-            </div>
-            {property.seniorPropertyManager && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Senior Manager: </span>
-                <span className="font-medium">{property.seniorPropertyManager}</span>
-              </div>
-            )}
-          </div>
+      if (!response.ok) {
+        throw new Error("Failed to delete property");
+      }
+
+      // Refresh properties list
+      fetchProperties();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete property");
+    }
+  };
+
+  // Filter properties based on search and filters
+  const filteredProperties = properties.filter((property) => {
+    const matchesSearch = property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.address.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || property.status === statusFilter;
+    const matchesType = typeFilter === "all" || property.type === typeFilter;
+    return matchesSearch && matchesStatus && matchesType;
+  });
+
+  const getPropertyIcon = (type: string) => {
+    switch (type) {
+      case "single_family":
+        return <IconHome2 className="h-5 w-5" />;
+      case "apartment":
+        return <IconBuilding className="h-5 w-5" />;
+      case "condo":
+        return <IconBuildingSkyscraper className="h-5 w-5" />;
+      case "commercial":
+        return <IconBuildingStore className="h-5 w-5" />;
+      default:
+        return <IconHome className="h-5 w-5" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active":
+        return "bg-green-100 text-green-800";
+      case "inactive":
+        return "bg-gray-100 text-gray-800";
+      case "occupied":
+        return "bg-blue-100 text-blue-800";
+      case "vacant":
+        return "bg-yellow-100 text-yellow-800";
+      case "maintenance":
+        return "bg-orange-100 text-orange-800";
+      case "pending_turn":
+        return "bg-purple-100 text-purple-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <IconLoader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      </CardContent>
-    </Card>
-  );
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="text-center text-red-600 p-8">
+          Error: {error}
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Properties</h1>
             <p className="text-muted-foreground">
-              Manage your property portfolio and track performance
+              Manage your property portfolio
             </p>
           </div>
           <Button className="flex items-center gap-2">
@@ -221,232 +204,214 @@ export default function PropertiesPage() {
           </Button>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
-              <IconBuilding className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{mockProperties.length}</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-600">+2</span> added this month
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Properties</CardTitle>
-              <IconHome className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {mockProperties.filter(p => p.status === 'active').length}
+        {/* Filters and View Toggle */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <IconSearch className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search properties..."
+                    className="pl-9"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {Math.round((mockProperties.filter(p => p.status === 'active').length / mockProperties.length) * 100)}% of portfolio
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <IconCurrencyDollar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(
-                  mockProperties
-                    .filter(p => p.monthlyRent)
-                    .reduce((sum, p) => sum + (p.monthlyRent || 0), 0)
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">Monthly rental income</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Sq Ft</CardTitle>
-              <IconRuler className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {Math.round(
-                  mockProperties.reduce((sum, p) => sum + p.squareFeet, 0) / mockProperties.length
-                ).toLocaleString()}
-              </div>
-              <p className="text-xs text-muted-foreground">Square feet per property</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-1 gap-2">
-            <div className="relative flex-1 max-w-sm">
-              <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search properties..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="vacant">Vacant</SelectItem>
-                <SelectItem value="sold">Sold</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="All Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="apartment">Apartment</SelectItem>
-                <SelectItem value="house">House</SelectItem>
-                <SelectItem value="condo">Condo</SelectItem>
-                <SelectItem value="commercial">Commercial</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
-              <TabsList>
-                <TabsTrigger value="grid" className="flex items-center gap-2">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="occupied">Occupied</SelectItem>
+                  <SelectItem value="vacant">Vacant</SelectItem>
+                  <SelectItem value="maintenance">Maintenance</SelectItem>
+                  <SelectItem value="pending_turn">Pending Turn</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="single_family">Single Family</SelectItem>
+                  <SelectItem value="apartment">Apartment</SelectItem>
+                  <SelectItem value="condo">Condo</SelectItem>
+                  <SelectItem value="townhouse">Townhouse</SelectItem>
+                  <SelectItem value="commercial">Commercial</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex gap-2">
+                <Button
+                  variant={viewMode === "grid" ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setViewMode("grid")}
+                >
                   <IconLayoutGrid className="h-4 w-4" />
-                  Grid
-                </TabsTrigger>
-                <TabsTrigger value="table" className="flex items-center gap-2">
+                </Button>
+                <Button
+                  variant={viewMode === "list" ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setViewMode("list")}
+                >
                   <IconList className="h-4 w-4" />
-                  Table
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </div>
-
-        {/* Properties Content */}
-        <Tabs value={viewMode} className="space-y-4">
-          <TabsContent value="grid">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredProperties.map((property) => (
-                <PropertyCard key={property.id} property={property} />
-              ))}
+                </Button>
+              </div>
             </div>
-          </TabsContent>
+          </CardContent>
+        </Card>
 
-          <TabsContent value="table">
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Property</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Manager</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead className="text-right">Rent</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProperties.map((property) => (
-                      <TableRow key={property.id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{property.name}</div>
-                            <div className="text-sm text-muted-foreground flex items-center">
-                              <IconMapPin className="mr-1 h-3 w-3" />
-                              {property.city}, {property.state}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            {getPropertyTypeIcon(property.propertyType)}
-                            <span className="ml-2 capitalize">{property.propertyType}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(property.status)}</TableCell>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{property.propertyManager}</div>
-                            {property.seniorPropertyManager && (
-                              <div className="text-sm text-muted-foreground">
-                                Sr: {property.seniorPropertyManager}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {property.bedrooms && property.bathrooms ? (
-                              <div>{property.bedrooms}bed / {property.bathrooms}bath</div>
-                            ) : null}
-                            <div className="text-muted-foreground">
-                              {property.squareFeet.toLocaleString()} sq ft
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {property.monthlyRent ? formatCurrency(property.monthlyRent) : 'N/A'}
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <IconDots className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <IconEye className="mr-2 h-4 w-4" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <IconEdit className="mr-2 h-4 w-4" />
-                                Edit Property
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        {filteredProperties.length === 0 && (
+        {/* Properties Display */}
+        {viewMode === "grid" ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredProperties.map((property) => (
+              <Card key={property.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      {getPropertyIcon(property.type)}
+                      <CardTitle className="text-lg">{property.name}</CardTitle>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <IconDots className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem>
+                          <IconEye className="mr-2 h-4 w-4" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                          <IconEdit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          className="text-red-600"
+                          onClick={() => handleDelete(property.id)}
+                        >
+                          <IconTrash className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <Badge className={getStatusColor(property.status)}>
+                    {property.status.replace("_", " ").toUpperCase()}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <IconMapPin className="mr-1 h-3 w-3" />
+                    {property.address}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {property.city}, {property.state} {property.zipCode}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="flex items-center text-sm">
+                      <IconBed className="mr-1 h-3 w-3 text-muted-foreground" />
+                      {property.bedrooms} Beds
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <IconBath className="mr-1 h-3 w-3 text-muted-foreground" />
+                      {property.bathrooms} Baths
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <IconRuler className="mr-1 h-3 w-3 text-muted-foreground" />
+                      {property.squareFeet} sqft
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <IconCurrencyDollar className="mr-1 h-3 w-3 text-muted-foreground" />
+                      {formatCurrency(parseFloat(property.monthlyRent))}/mo
+                    </div>
+                  </div>
+                  {property.isCore && (
+                    <Badge variant="secondary">Core Property</Badge>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
           <Card>
-            <CardContent className="p-8 text-center">
-              <IconBuilding className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No properties found</h3>
-              <p className="text-muted-foreground mb-4">
-                Try adjusting your search criteria or filters.
-              </p>
-              <Button>
-                <IconPlus className="h-4 w-4 mr-2" />
-                Add New Property
-              </Button>
-            </CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Property</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Beds/Baths</TableHead>
+                  <TableHead>Rent</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProperties.map((property) => (
+                  <TableRow key={property.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {getPropertyIcon(property.type)}
+                        {property.name}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div>{property.address}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {property.city}, {property.state} {property.zipCode}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{property.type.replace("_", " ")}</TableCell>
+                    <TableCell>
+                      <Badge className={getStatusColor(property.status)}>
+                        {property.status.replace("_", " ").toUpperCase()}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{property.bedrooms}/{property.bathrooms}</TableCell>
+                    <TableCell>{formatCurrency(parseFloat(property.monthlyRent))}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <IconDots className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem>
+                            <IconEye className="mr-2 h-4 w-4" />
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <IconEdit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-red-600"
+                            onClick={() => handleDelete(property.id)}
+                          >
+                            <IconTrash className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </Card>
         )}
       </div>

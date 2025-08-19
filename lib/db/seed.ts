@@ -5,7 +5,6 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
 import * as schema from './schema';
 import { users, properties, vendors, turnStages, turns } from './schema';
-import * as bcrypt from 'bcryptjs';
 
 const sql = neon(process.env.DATABASE_URL!);
 const db = drizzle(sql, { schema });
@@ -15,9 +14,7 @@ async function seed() {
 
   try {
     // Create test users
-    const hashedPassword = await bcrypt.hash('password123', 10);
-    
-    const [adminUser] = await db.insert(users).values({
+    await db.insert(users).values({
       email: 'admin@example.com',
       name: 'Admin User',
       role: 'ADMIN',

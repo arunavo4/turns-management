@@ -35,7 +35,6 @@ import {
   LineChart,
   Line,
   Area,
-  AreaChart,
   BarChart,
   Bar,
   PieChart,

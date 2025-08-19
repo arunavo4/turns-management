@@ -5,11 +5,8 @@ import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconSearch,
   IconPlus,
-  IconFilter,
   IconMapPin,
   IconCalendar,
-  IconCurrencyDollar,
-  IconUser,
   IconClock,
   IconAlertTriangle,
   IconCircleCheck,
@@ -22,7 +19,6 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -43,14 +39,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
   mockTurns, 
   mockDashboardMetrics,
-  getStatusColor, 
   getPriorityColor, 
-  formatCurrency, 
-  formatDate,
+  formatCurrency,
   Turn 
 } from "@/lib/mock-data";
 

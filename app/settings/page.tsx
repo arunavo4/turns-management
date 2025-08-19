@@ -7,8 +7,6 @@ import {
   IconShield,
   IconUsers,
   IconDatabase,
-  IconMail,
-  IconKey,
   IconSettings,
 } from "@tabler/icons-react";
 import {

@@ -82,8 +82,9 @@ export function useCustomShape(params: {
     url: config.url,
     params: {
       source_id: process.env.NEXT_PUBLIC_ELECTRIC_SOURCE_ID,
-      ...params,
-      ...(params.columns && { columns: params.columns.join(',') })
+      table: params.table,
+      where: params.where,
+      columns: params.columns
     },
     headers: config.headers
   });
