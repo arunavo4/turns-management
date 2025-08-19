@@ -8,9 +8,512 @@ Minimal API surface for the Turns Management application, focusing on write oper
 
 ### Local-First API Design
 - **Reads**: Via Electric SQL shapes (no API calls)
-- **Writes**: Optimistic local updates with background sync
+- **Writes**: Multiple patterns available (see [Write Patterns](#electric-sql-write-patterns))
 - **Sync**: Electric handles real-time propagation
 - **API**: Only for authentication, complex business logic, and external integrations
+
+## Electric SQL Write Patterns
+
+Electric SQL provides read-path sync (data flows from Postgres to clients), but write-path sync is implemented using various patterns depending on your application needs. Here are the four main patterns, ordered from simplest to most sophisticated:
+
+### Pattern 1: Online Writes 🌐
+**Use Case**: Read-heavy apps, occasional writes, network required
+**Complexity**: ⭐ Simple
+
+Direct API calls for writes. No offline capability but very simple to implement.
+
+```typescript
+// Simple online writes pattern
+async function updateProperty(id: string, data: PropertyUpdate) {
+  // Direct API call - requires network
+  const response = await fetch(`/api/write/properties/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  
+  if (!response.ok) {
+    throw new Error('Failed to update property')
+  }
+  
+  // Electric will sync the update to all clients automatically
+  return await response.json()
+}
+
+// Usage in component
+function PropertyEditor() {
+  const [loading, setLoading] = useState(false)
+  
+  const handleSave = async (data) => {
+    setLoading(true)
+    try {
+      await updateProperty(property.id, data)
+      // Success! Electric sync will update UI automatically
+    } catch (error) {
+      // Handle error - show user feedback
+    } finally {
+      setLoading(false)
+    }
+  }
+}
+```
+
+**Benefits:**
+- Very simple to implement with existing REST APIs
+- Good for dashboards, analytics, data visualization
+- Works well when writes require online integration anyway
+
+**Drawbacks:**
+- Network latency on writes (loading spinners)
+- No offline write capability
+- UI doesn't update until server responds
+
+### Pattern 2: Optimistic State ⚡
+**Use Case**: Interactive apps, better UX, component-scoped optimism
+**Complexity**: ⭐⭐ Moderate
+
+Uses React's `useOptimistic` hook for immediate UI updates while writes process in background.
+
+```typescript
+// Optimistic state pattern with useOptimistic
+import { useOptimistic } from 'react'
+
+function PropertyList() {
+  const { data: properties } = useShape({
+    url: '/api/electric/v1/shape',
+    params: { table: 'properties' }
+  })
+  
+  // Optimistic state for immediate UI updates
+  const [optimisticProperties, addOptimisticProperty] = useOptimistic(
+    properties || [],
+    (state, newProperty) => [...state, newProperty]
+  )
+  
+  async function createProperty(formData) {
+    // 1. Add optimistically to local state (instant UI update)
+    addOptimisticProperty({
+      ...formData,
+      id: `temp-${Date.now()}`,
+      _optimistic: true
+    })
+    
+    // 2. Send to server (background)
+    try {
+      await fetch('/api/write/properties', {
+        method: 'POST',
+        body: JSON.stringify(formData)
+      })
+      // Success! Electric sync will replace optimistic data with real data
+    } catch (error) {
+      // Handle error - optimistic state will be automatically discarded
+      toast.error('Failed to create property')
+    }
+  }
+  
+  return (
+    <div>
+      {optimisticProperties.map((property) => (
+        <PropertyCard 
+          key={property.id} 
+          property={property}
+          isPending={property._optimistic}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+**Benefits:**
+- Instant UI updates (no loading states)
+- Works offline temporarily
+- Simple to implement with React's built-in hook
+
+**Drawbacks:**
+- Optimistic state is component-scoped only
+- Not persisted (lost on page reload)
+- Other components may show inconsistent data
+
+### Pattern 3: Shared Persistent Optimistic State 💾
+**Use Case**: Complex apps, shared state, persistence across sessions
+**Complexity**: ⭐⭐⭐ Advanced
+
+Stores optimistic state in a shared, persistent store (like Valtio + localStorage) that all components can access.
+
+```typescript
+// Shared persistent optimistic state with Valtio
+import { proxy, useSnapshot } from 'valtio'
+
+// Shared store for optimistic writes
+const writeStore = proxy({
+  pendingWrites: [] as PendingWrite[],
+  rejectedWrites: [] as RejectedWrite[]
+})
+
+// Persist to localStorage
+const savedWrites = localStorage.getItem('pending-writes')
+if (savedWrites) {
+  writeStore.pendingWrites = JSON.parse(savedWrites)
+}
+
+// Sync to localStorage on changes
+subscribe(writeStore, () => {
+  localStorage.setItem('pending-writes', JSON.stringify(writeStore.pendingWrites))
+})
+
+interface PendingWrite {
+  id: string
+  table: string
+  operation: 'create' | 'update' | 'delete'
+  data: any
+  timestamp: number
+}
+
+// Write utilities
+export const writeAPI = {
+  async optimisticUpdate(table: string, data: any) {
+    const writeId = `${table}-${Date.now()}-${Math.random()}`
+    
+    // 1. Add to pending writes (persisted, shared)
+    writeStore.pendingWrites.push({
+      id: writeId,
+      table,
+      operation: 'update',
+      data,
+      timestamp: Date.now()
+    })
+    
+    // 2. Send to server in background
+    try {
+      const response = await fetch(`/api/write/${table}`, {
+        method: 'POST',
+        body: JSON.stringify({ ...data, writeId })
+      })
+      
+      if (response.ok) {
+        // Remove from pending writes (success)
+        writeStore.pendingWrites = writeStore.pendingWrites.filter(w => w.id !== writeId)
+      } else {
+        throw new Error('Server rejected write')
+      }
+    } catch (error) {
+      // Move to rejected writes for user review
+      const pendingWrite = writeStore.pendingWrites.find(w => w.id === writeId)
+      if (pendingWrite) {
+        writeStore.rejectedWrites.push({
+          ...pendingWrite,
+          error: error.message
+        })
+        writeStore.pendingWrites = writeStore.pendingWrites.filter(w => w.id !== writeId)
+      }
+    }
+  },
+  
+  // Merge synced data with optimistic state
+  mergeWithPending(syncedData: any[], table: string) {
+    const snapshot = useSnapshot(writeStore)
+    const pendingForTable = snapshot.pendingWrites.filter(w => w.table === table)
+    
+    // Apply pending writes over synced data
+    return pendingForTable.reduce((data, write) => {
+      return applyWrite(data, write)
+    }, syncedData)
+  }
+}
+
+// Usage in components
+function PropertyList() {
+  const { data: syncedProperties } = useShape({
+    url: '/api/electric/v1/shape',
+    params: { table: 'properties' }
+  })
+  
+  // Merge synced data with optimistic writes
+  const properties = writeAPI.mergeWithPending(syncedProperties || [], 'properties')
+  const writeSnapshot = useSnapshot(writeStore)
+  
+  return (
+    <div>
+      {properties.map((property) => (
+        <PropertyCard key={property.id} property={property} />
+      ))}
+      
+      {/* Show pending writes status */}
+      {writeSnapshot.pendingWrites.length > 0 && (
+        <SyncStatus pending={writeSnapshot.pendingWrites.length} />
+      )}
+      
+      {/* Show rejected writes */}
+      {writeSnapshot.rejectedWrites.length > 0 && (
+        <ConflictResolver rejectedWrites={writeSnapshot.rejectedWrites} />
+      )}
+    </div>
+  )
+}
+```
+
+**Benefits:**
+- Persistent across page reloads and sessions
+- Shared state across all components
+- Sophisticated rollback and conflict resolution
+- Separates immutable synced state from mutable optimistic state
+
+**Drawbacks:**
+- More complexity in merge logic
+- Still uses API for writes (not pure local-first)
+- Requires state management library
+
+### Pattern 4: Through-the-Database Sync 🗄️
+**Use Case**: Pure local-first apps, offline-first, automatic sync
+**Complexity**: ⭐⭐⭐⭐ Expert
+
+Uses embedded database (PGlite) with shadow tables and triggers for automatic optimistic state management and background sync.
+
+```typescript
+// Through-the-database sync with PGlite
+import { PGlite } from '@electric-sql/pglite'
+
+// Local schema with shadow tables and triggers
+const localSchema = `
+-- Synced data (immutable from Electric)
+CREATE TABLE properties_synced (
+  id UUID PRIMARY KEY,
+  name VARCHAR(255),
+  address TEXT,
+  -- ... other columns
+  _synced_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Local optimistic writes
+CREATE TABLE properties_local (
+  id UUID PRIMARY KEY,
+  name VARCHAR(255),
+  address TEXT,
+  -- ... other columns
+  _operation VARCHAR(10) DEFAULT 'update', -- 'insert', 'update', 'delete'
+  _created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Change log for sync
+CREATE TABLE changes (
+  id SERIAL PRIMARY KEY,
+  table_name VARCHAR(255),
+  record_id UUID,
+  operation VARCHAR(10),
+  data JSONB,
+  created_at TIMESTAMP DEFAULT NOW(),
+  synced BOOLEAN DEFAULT FALSE
+);
+
+-- Combined view for application queries
+CREATE VIEW properties AS
+SELECT 
+  COALESCE(l.id, s.id) as id,
+  COALESCE(l.name, s.name) as name,
+  COALESCE(l.address, s.address) as address,
+  -- ... other columns
+  CASE WHEN l.id IS NOT NULL THEN TRUE ELSE FALSE END as _is_local
+FROM properties_synced s
+FULL OUTER JOIN properties_local l ON s.id = l.id
+WHERE l._operation != 'delete' OR l.id IS NULL;
+
+-- INSTEAD OF trigger for writes
+CREATE OR REPLACE FUNCTION handle_property_write()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Insert into local table
+  INSERT INTO properties_local (id, name, address, _operation)
+  VALUES (NEW.id, NEW.name, NEW.address, 'update')
+  ON CONFLICT (id) DO UPDATE SET
+    name = NEW.name,
+    address = NEW.address,
+    _operation = 'update';
+  
+  -- Log the change
+  INSERT INTO changes (table_name, record_id, operation, data)
+  VALUES ('properties', NEW.id, 'update', to_jsonb(NEW));
+  
+  -- Notify sync process
+  PERFORM pg_notify('sync_changes', json_build_object(
+    'table', 'properties',
+    'id', NEW.id,
+    'operation', 'update'
+  )::text);
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER properties_write_trigger
+  INSTEAD OF INSERT OR UPDATE ON properties
+  FOR EACH ROW EXECUTE FUNCTION handle_property_write();
+`;
+
+// Background sync process
+class ChangeLogSynchronizer {
+  constructor(private db: PGlite) {}
+  
+  async syncPendingChanges() {
+    const changes = await this.db.sql`
+      SELECT * FROM changes WHERE synced = false ORDER BY created_at
+    `
+    
+    for (const change of changes.rows) {
+      try {
+        // Send to server
+        await fetch(`/api/write/${change.table_name}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            id: change.record_id,
+            operation: change.operation,
+            data: change.data
+          })
+        })
+        
+        // Mark as synced
+        await this.db.sql`
+          UPDATE changes SET synced = true WHERE id = ${change.id}
+        `
+      } catch (error) {
+        // Handle rollback - could be sophisticated or simple
+        console.error('Sync failed for change:', change.id, error)
+        
+        // Simple strategy: clear all local state
+        // await this.rollbackAllChanges()
+      }
+    }
+  }
+  
+  // Clean up synced local writes when real data arrives
+  async cleanupSyncedWrites(table: string, recordId: string) {
+    await this.db.sql`
+      DELETE FROM ${table}_local WHERE id = ${recordId}
+    `
+  }
+}
+
+// Application code stays simple
+function PropertyList() {
+  const { data: properties } = useLiveQuery('SELECT * FROM properties')
+  
+  // Direct database operations
+  const createProperty = async (data: PropertyData) => {
+    // Just insert - triggers handle everything else
+    await db.sql`
+      INSERT INTO properties (id, name, address) 
+      VALUES (${data.id}, ${data.name}, ${data.address})
+    `
+    // Sync happens automatically in background
+  }
+  
+  return (
+    <div>
+      {properties?.map((property) => (
+        <PropertyCard 
+          key={property.id} 
+          property={property}
+          isPending={property._is_local}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+**Benefits:**
+- Pure local-first experience
+- Automatic optimistic state management
+- Full offline capability with persistent queue
+- Application code stays simple
+
+**Drawbacks:**
+- Heavy dependency (embedded database)
+- Complex schema with shadow tables and triggers
+- Rollback handling loses write context
+- More difficult to debug sync issues
+
+## Write Pattern Decision Matrix
+
+Choose your write pattern based on your application requirements:
+
+| Pattern | Offline Writes | Instant UI | Persistence | Complexity | Best For |
+|---------|----------------|------------|-------------|------------|----------|
+| **Online** | ❌ | ❌ | N/A | ⭐ | Dashboards, Analytics |
+| **Optimistic** | ⏱️ Temporary | ✅ | ❌ | ⭐⭐ | Interactive Apps |
+| **Shared Persistent** | ✅ | ✅ | ✅ | ⭐⭐⭐ | SaaS, Collaboration |
+| **Through-DB** | ✅ | ✅ | ✅ | ⭐⭐⭐⭐ | Local-First Apps |
+
+## Advanced Considerations
+
+### Merge Logic
+When Electric syncs data from the server, your app needs to handle overlapping optimistic state:
+
+```typescript
+// Rebasing local changes over server updates
+function rebaseLocalChanges(serverData: Property[], localWrites: PendingWrite[]) {
+  return localWrites.reduce((data, write) => {
+    const existing = data.find(item => item.id === write.data.id)
+    
+    if (existing && existing.version > write.timestamp) {
+      // Server version is newer - preserve server data, discard local
+      return data
+    }
+    
+    // Apply local write over server data
+    return data.map(item => 
+      item.id === write.data.id 
+        ? { ...item, ...write.data, _hasLocalChanges: true }
+        : item
+    )
+  }, serverData)
+}
+```
+
+### Conflict Resolution Strategies
+
+1. **Last Write Wins** (Simple)
+   ```typescript
+   if (serverVersion > localVersion) {
+     return serverData  // Discard local changes
+   }
+   ```
+
+2. **Field-Level Merge** (Sophisticated)
+   ```typescript
+   const merged = { ...serverData }
+   localChanges.fields.forEach(field => {
+     if (localChanges.timestamps[field] > serverData.updatedAt) {
+       merged[field] = localChanges.data[field]
+     }
+   })
+   ```
+
+3. **User Resolution** (Interactive)
+   ```typescript
+   if (hasConflict(local, server)) {
+     return await showConflictDialog(local, server)
+   }
+   ```
+
+### YAGNI Principle
+
+Adam Wiggins (Muse creator) found that **conflicts are extremely rare** in practice and can be mitigated with presence indicators and smart UX. Simple strategies often work better than complex conflict resolution systems.
+
+## Recommended Tools
+
+### Libraries
+- **React**: `useOptimistic` hook for pattern 2
+- **Valtio**: Reactive state management for pattern 3  
+- **TanStack Query**: Mutation management and optimistic updates
+- **PGlite**: Embedded database for pattern 4
+
+### Frameworks  
+- **LiveStore**: Full local-first framework
+- **TinyBase**: Reactive data store with sync
+- **tRPC**: Type-safe API with optimistic updates
+
+Choose the pattern that matches your app's complexity needs and user experience requirements.
 
 ## Database Connection Strategy
 

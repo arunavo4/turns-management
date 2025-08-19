@@ -566,6 +566,427 @@ export default function RootLayout({
 }
 ```
 
+## 🔄 Day 6: Choose Your Write Pattern
+
+Electric SQL supports multiple write patterns. For Turns Management, we recommend **Pattern 3: Shared Persistent Optimistic State** using Zustand + PGlite.
+
+### Pattern Comparison Quick Reference
+
+| Pattern | Complexity | Offline | Setup Time | Best For |
+|---------|------------|---------|------------|----------|
+| **Pattern 1: Online** | ⭐ | ❌ | 30min | Dashboards |
+| **Pattern 2: useOptimistic** | ⭐⭐ | ⏱️ | 2hrs | Simple forms |
+| **Pattern 3: Zustand + PGlite** | ⭐⭐⭐ | ✅ | 1 day | **Turns Management** |
+| **Pattern 4: Shadow Tables** | ⭐⭐⭐⭐ | ✅ | 3 days | Advanced apps |
+
+### Recommended: Pattern 3 Implementation
+
+#### Step 1: Setup Zustand Write Store
+
+Create `src/stores/write-store.ts`:
+```typescript
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import { db } from '@/db/client'
+import { properties } from '@/db/client/schema'
+import { eq } from 'drizzle-orm'
+
+interface PendingWrite {
+  id: string
+  table: string
+  operation: 'create' | 'update' | 'delete'
+  data: any
+  timestamp: number
+  retries: number
+}
+
+interface WriteStore {
+  pendingWrites: PendingWrite[]
+  rejectedWrites: PendingWrite[]
+  isOnline: boolean
+  
+  // Actions
+  addPendingWrite: (write: Omit<PendingWrite, 'timestamp' | 'retries'>) => void
+  removePendingWrite: (id: string) => void
+  syncPendingWrites: () => Promise<void>
+}
+
+export const useWriteStore = create<WriteStore>()(
+  persist(
+    (set, get) => ({
+      pendingWrites: [],
+      rejectedWrites: [],
+      isOnline: navigator.onLine,
+
+      addPendingWrite: (write) => {
+        const pendingWrite: PendingWrite = {
+          ...write,
+          timestamp: Date.now(),
+          retries: 0
+        }
+        
+        set(state => ({
+          pendingWrites: [...state.pendingWrites, pendingWrite]
+        }))
+
+        // Auto-sync in background
+        get().syncPendingWrites()
+      },
+
+      removePendingWrite: (id) => {
+        set(state => ({
+          pendingWrites: state.pendingWrites.filter(w => w.id !== id)
+        }))
+      },
+
+      syncPendingWrites: async () => {
+        const { pendingWrites, isOnline } = get()
+        if (!isOnline || pendingWrites.length === 0) return
+
+        for (const write of pendingWrites) {
+          try {
+            const response = await fetch(`/api/write/${write.table}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                operation: write.operation,
+                data: write.data
+              })
+            })
+
+            if (response.ok) {
+              get().removePendingWrite(write.id)
+            } else {
+              throw new Error(`Server error: ${response.status}`)
+            }
+          } catch (error) {
+            console.warn('Sync failed:', error)
+            // Retry logic handled by background sync
+          }
+        }
+      }
+    }),
+    { 
+      name: 'write-store',
+      partialize: (state) => ({ 
+        pendingWrites: state.pendingWrites,
+        rejectedWrites: state.rejectedWrites 
+      })
+    }
+  )
+)
+```
+
+#### Step 2: Create Optimistic Write Utilities
+
+Create `src/lib/optimistic-writes.ts`:
+```typescript
+import { db } from '@/db/client'
+import { properties } from '@/db/client/schema'
+import { useWriteStore } from '@/stores/write-store'
+import { eq } from 'drizzle-orm'
+
+export const optimisticWrites = {
+  async updateProperty(id: string, updates: any) {
+    const writeId = `property-${id}-${Date.now()}`
+    
+    // 1. Update PGlite immediately (instant UI)
+    await db.update(properties)
+      .set({
+        ...updates,
+        _synced: false,
+        _sentToServer: false,
+        _localModifiedAt: new Date()
+      })
+      .where(eq(properties.id, id))
+
+    // 2. Queue for server sync
+    useWriteStore.getState().addPendingWrite({
+      id: writeId,
+      table: 'properties',
+      operation: 'update', 
+      data: { id, ...updates }
+    })
+
+    return id
+  },
+
+  async createProperty(data: any) {
+    const id = crypto.randomUUID()
+    const writeId = `property-${id}-${Date.now()}`
+
+    // 1. Insert locally first
+    await db.insert(properties).values({
+      ...data,
+      id,
+      _synced: false,
+      _new: true
+    })
+
+    // 2. Queue for sync  
+    useWriteStore.getState().addPendingWrite({
+      id: writeId,
+      table: 'properties', 
+      operation: 'create',
+      data: { ...data, id }
+    })
+
+    return id
+  },
+
+  async deleteProperty(id: string) {
+    const writeId = `property-${id}-${Date.now()}`
+
+    // 1. Mark as deleted locally
+    await db.update(properties)
+      .set({
+        _deleted: true,
+        _synced: false
+      })
+      .where(eq(properties.id, id))
+
+    // 2. Queue deletion
+    useWriteStore.getState().addPendingWrite({
+      id: writeId,
+      table: 'properties',
+      operation: 'delete',
+      data: { id }
+    })
+  }
+}
+```
+
+#### Step 3: Use in React Components
+
+Update `src/app/(dashboard)/properties/page.tsx`:
+```typescript
+'use client'
+
+import { useLiveQuery } from '@electric-sql/react'
+import { optimisticWrites } from '@/lib/optimistic-writes'
+import { useWriteStore } from '@/stores/write-store'
+import { db } from '@/db/client'
+import { properties } from '@/db/client/schema'
+import { eq } from 'drizzle-orm'
+
+export default function PropertiesPage() {
+  // Live query from PGlite (includes optimistic updates)
+  const { data: propertyList } = useLiveQuery(
+    db.select().from(properties).where(eq(properties._deleted, false))
+  )
+  
+  // Get sync status
+  const { pendingWrites, rejectedWrites } = useWriteStore()
+
+  const handleCreateProperty = async (formData: any) => {
+    try {
+      // Instant UI update + background sync
+      await optimisticWrites.createProperty(formData)
+      toast.success('Property created!')
+    } catch (error) {
+      toast.error('Failed to create property')
+    }
+  }
+
+  const handleUpdateProperty = async (id: string, updates: any) => {
+    await optimisticWrites.updateProperty(id, updates)
+    // UI updates instantly, no loading state needed
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Properties</h1>
+          {pendingWrites.length > 0 && (
+            <p className="text-sm text-orange-600">
+              {pendingWrites.length} changes syncing...
+            </p>
+          )}
+        </div>
+        
+        <CreatePropertyButton onCreate={handleCreateProperty} />
+      </div>
+
+      {/* Show rejected writes */}
+      {rejectedWrites.length > 0 && (
+        <div className="bg-red-50 p-4 rounded-lg">
+          <p className="text-red-800">
+            {rejectedWrites.length} changes failed to sync
+          </p>
+          <button className="text-red-600 underline">
+            Review and retry
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {propertyList?.map((property) => (
+          <PropertyCard
+            key={property.id}
+            property={property}
+            onUpdate={handleUpdateProperty}
+            isPending={!property._synced}
+            isOptimistic={property._new}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+#### Step 4: Background Sync Service
+
+Create `src/lib/sync-service.ts`:
+```typescript
+import { useWriteStore } from '@/stores/write-store'
+
+class BackgroundSyncService {
+  private syncInterval: NodeJS.Timeout | null = null
+
+  start() {
+    // Sync every 30 seconds when online
+    this.syncInterval = setInterval(() => {
+      if (navigator.onLine) {
+        useWriteStore.getState().syncPendingWrites()
+      }
+    }, 30000)
+
+    // Sync immediately when coming back online
+    window.addEventListener('online', () => {
+      useWriteStore.getState().syncPendingWrites()
+    })
+
+    // Update online status
+    window.addEventListener('online', () => {
+      useWriteStore.setState({ isOnline: true })
+    })
+    
+    window.addEventListener('offline', () => {
+      useWriteStore.setState({ isOnline: false })
+    })
+  }
+
+  stop() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval)
+    }
+  }
+}
+
+export const syncService = new BackgroundSyncService()
+
+// Auto-start in browser
+if (typeof window !== 'undefined') {
+  syncService.start()
+}
+```
+
+#### Step 5: Sync Status Component
+
+Create `src/components/sync-status.tsx`:
+```typescript
+'use client'
+
+import { useWriteStore } from '@/stores/write-store'
+import { WifiOff, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+
+export function SyncStatus() {
+  const { pendingWrites, rejectedWrites, isOnline } = useWriteStore()
+  
+  if (!isOnline) {
+    return (
+      <div className="flex items-center gap-2 text-orange-600">
+        <WifiOff className="h-4 w-4" />
+        <span className="text-sm">Offline</span>
+      </div>
+    )
+  }
+
+  if (pendingWrites.length > 0) {
+    return (
+      <div className="flex items-center gap-2 text-blue-600">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm">{pendingWrites.length} syncing</span>
+      </div>
+    )
+  }
+
+  if (rejectedWrites.length > 0) {
+    return (
+      <div className="flex items-center gap-2 text-red-600">
+        <AlertCircle className="h-4 w-4" />
+        <span className="text-sm">{rejectedWrites.length} failed</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-green-600">
+      <CheckCircle className="h-4 w-4" />
+      <span className="text-sm">Synced</span>
+    </div>
+  )
+}
+```
+
+### Alternative: Pattern 2 (Simple Optimistic)
+
+If you prefer React's built-in optimistic state for simpler use cases:
+
+```typescript
+'use client'
+
+import { useOptimistic } from 'react'
+import { useShape } from '@electric-sql/react'
+
+export function SimplePropertyList() {
+  const { data: syncedProperties } = useShape({
+    url: '/api/electric/v1/shape',
+    params: { table: 'properties' }
+  })
+
+  const [optimisticProperties, addOptimistic] = useOptimistic(
+    syncedProperties || [],
+    (state, newProperty) => [...state, newProperty]
+  )
+
+  const createProperty = async (data: any) => {
+    const tempProperty = { 
+      ...data, 
+      id: `temp-${Date.now()}`,
+      _optimistic: true 
+    }
+    
+    // 1. Show optimistically
+    addOptimistic(tempProperty)
+
+    // 2. Send to server
+    try {
+      await fetch('/api/write/properties', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      })
+    } catch (error) {
+      toast.error('Failed to create property')
+    }
+  }
+
+  return (
+    <div>
+      {optimisticProperties.map((property) => (
+        <PropertyCard 
+          key={property.id}
+          property={property}
+          isPending={property._optimistic}
+        />
+      ))}
+    </div>
+  )
+}
+```
+
 ## 📝 Testing Your Setup
 
 ### 1. Verify Electric Cloud Connection

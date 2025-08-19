@@ -485,72 +485,473 @@ export class SyncManager {
 
 ## Write Path Implementation
 
-### Optimistic Updates
-`src/sync/writes.ts`:
+Electric SQL supports multiple write patterns. Our Drizzle + PGlite setup is perfectly suited for patterns 2-4, with pattern 3 (Shared Persistent Optimistic State) being the sweet spot for most use cases.
+
+### Pattern 1: Online Writes (Simple)
+Direct Drizzle operations against the server API:
 
 ```typescript
-import { db } from '@/db/client'
-import { properties } from '@/db/client/schema'
+// src/sync/online-writes.ts
+import { db as serverDb } from '@/db/server'
+import { properties as serverProperties } from '@/db/server/schema'
 
-export async function updateProperty(id: string, updates: any) {
-  // 1. Optimistic local update
-  await db.update(properties)
-    .set({
-      ...updates,
-      _synced: false,
-      _sentToServer: false,
-      _localModifiedAt: new Date(),
-      version: sql`version + 1`
-    })
-    .where(eq(properties.id, id))
-
-  // 2. Queue for server sync
-  await queueWrite({
-    table: 'properties',
-    operation: 'update',
-    id,
-    data: updates
-  })
-}
-
-// Background sync process
-export async function syncWrites() {
-  // Get all unsynced changes
-  const unsynced = await db.select()
-    .from(properties)
-    .where(eq(properties._synced, false))
-
-  for (const record of unsynced) {
-    try {
-      // Send to server
-      const response = await fetch('/api/write/properties', {
-        method: 'POST',
-        body: JSON.stringify(record)
+export async function updatePropertyOnline(id: string, updates: any) {
+  // Direct server operation - requires network
+  try {
+    const result = await serverDb.update(serverProperties)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+        version: sql`version + 1`
       })
+      .where(eq(serverProperties.id, id))
+      .returning()
 
-      if (response.ok) {
-        // Mark as synced
-        await db.update(properties)
-          .set({
-            _synced: true,
-            _sentToServer: true,
-            _syncError: null
-          })
-          .where(eq(properties.id, record.id))
-      }
-    } catch (error) {
-      // Track sync error
-      await db.update(properties)
-        .set({
-          _syncError: error.message,
-          _syncRetries: sql`_sync_retries + 1`,
-          _lastSyncAttempt: new Date()
-        })
-        .where(eq(properties.id, record.id))
-    }
+    // Electric will sync this change to all clients automatically
+    return result[0]
+  } catch (error) {
+    throw new Error(`Failed to update property: ${error.message}`)
   }
 }
 ```
+
+### Pattern 2: Simple Optimistic Updates (React useOptimistic)
+Uses React's built-in optimistic state with Drizzle queries:
+
+```typescript
+// src/hooks/use-optimistic-properties.ts
+import { useOptimistic } from 'react'
+import { useShape } from '@electric-sql/react'
+
+export function useOptimisticProperties() {
+  // Get synced data from Electric
+  const { data: syncedProperties } = useShape({
+    url: '/api/electric/v1/shape',
+    params: { table: 'properties' }
+  })
+
+  // Add optimistic state layer
+  const [optimisticProperties, addOptimisticUpdate] = useOptimistic(
+    syncedProperties || [],
+    (state, update: PropertyUpdate) => {
+      return state.map(property => 
+        property.id === update.id 
+          ? { ...property, ...update.data, _optimistic: true }
+          : property
+      )
+    }
+  )
+
+  const updateProperty = async (id: string, data: any) => {
+    // 1. Optimistic update (instant UI)
+    addOptimisticUpdate({ id, data })
+
+    // 2. Send to server (background)
+    try {
+      await fetch(`/api/write/properties/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      // Success! Electric sync will replace optimistic data
+    } catch (error) {
+      // Optimistic state automatically reverts on error
+      toast.error('Failed to update property')
+    }
+  }
+
+  return { properties: optimisticProperties, updateProperty }
+}
+```
+
+### Pattern 3: Shared Persistent Optimistic State (Recommended)
+Uses Zustand (already in our stack) with PGlite for persistent, shared optimistic state:
+
+```typescript
+// src/stores/write-store.ts  
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import { db } from '@/db/client'
+import { properties } from '@/db/client/schema'
+
+interface PendingWrite {
+  id: string
+  table: string
+  operation: 'create' | 'update' | 'delete'
+  data: any
+  timestamp: number
+  retries: number
+}
+
+interface WriteStore {
+  pendingWrites: PendingWrite[]
+  rejectedWrites: PendingWrite[]
+  isOnline: boolean
+  
+  // Actions
+  addPendingWrite: (write: Omit<PendingWrite, 'timestamp' | 'retries'>) => void
+  removePendingWrite: (id: string) => void
+  markAsRejected: (id: string, error: string) => void
+  syncPendingWrites: () => Promise<void>
+}
+
+export const useWriteStore = create<WriteStore>()(
+  persist(
+    (set, get) => ({
+      pendingWrites: [],
+      rejectedWrites: [],
+      isOnline: navigator.onLine,
+
+      addPendingWrite: (write) => {
+        const pendingWrite: PendingWrite = {
+          ...write,
+          timestamp: Date.now(),
+          retries: 0
+        }
+        
+        set(state => ({
+          pendingWrites: [...state.pendingWrites, pendingWrite]
+        }))
+
+        // Trigger background sync
+        get().syncPendingWrites()
+      },
+
+      removePendingWrite: (id) => {
+        set(state => ({
+          pendingWrites: state.pendingWrites.filter(w => w.id !== id)
+        }))
+      },
+
+      markAsRejected: (id, error) => {
+        set(state => {
+          const write = state.pendingWrites.find(w => w.id === id)
+          if (!write) return state
+
+          return {
+            pendingWrites: state.pendingWrites.filter(w => w.id !== id),
+            rejectedWrites: [...state.rejectedWrites, { ...write, error }]
+          }
+        })
+      },
+
+      syncPendingWrites: async () => {
+        const { pendingWrites, isOnline } = get()
+        if (!isOnline || pendingWrites.length === 0) return
+
+        for (const write of pendingWrites) {
+          try {
+            const response = await fetch(`/api/write/${write.table}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                operation: write.operation,
+                data: write.data
+              })
+            })
+
+            if (response.ok) {
+              // Success - remove from pending
+              get().removePendingWrite(write.id)
+            } else {
+              throw new Error(`Server responded with ${response.status}`)
+            }
+          } catch (error) {
+            // Mark as rejected after 3 retries
+            if (write.retries >= 3) {
+              get().markAsRejected(write.id, error.message)
+            } else {
+              // Increment retry count
+              set(state => ({
+                pendingWrites: state.pendingWrites.map(w => 
+                  w.id === write.id ? { ...w, retries: w.retries + 1 } : w
+                )
+              }))
+            }
+          }
+        }
+      }
+    }),
+    {
+      name: 'write-store',
+      partialize: (state) => ({ 
+        pendingWrites: state.pendingWrites,
+        rejectedWrites: state.rejectedWrites 
+      })
+    }
+  )
+)
+
+// Optimistic write operations with Drizzle
+export const optimisticWrites = {
+  async updateProperty(id: string, updates: any) {
+    const writeId = `property-${id}-${Date.now()}`
+    
+    // 1. Update PGlite immediately (optimistic)
+    await db.update(properties)
+      .set({
+        ...updates,
+        _synced: false,
+        _sentToServer: false,
+        _localModifiedAt: new Date()
+      })
+      .where(eq(properties.id, id))
+
+    // 2. Add to pending writes queue
+    useWriteStore.getState().addPendingWrite({
+      id: writeId,
+      table: 'properties',
+      operation: 'update',
+      data: { id, ...updates }
+    })
+  },
+
+  async createProperty(data: any) {
+    const id = crypto.randomUUID()
+    const writeId = `property-${id}-${Date.now()}`
+
+    // 1. Insert into PGlite immediately
+    await db.insert(properties)
+      .values({
+        ...data,
+        id,
+        _synced: false,
+        _sentToServer: false,
+        _new: true
+      })
+
+    // 2. Queue for server sync
+    useWriteStore.getState().addPendingWrite({
+      id: writeId,
+      table: 'properties',
+      operation: 'create',
+      data: { ...data, id }
+    })
+
+    return id
+  },
+
+  async deleteProperty(id: string) {
+    const writeId = `property-${id}-${Date.now()}`
+
+    // 1. Mark as deleted locally
+    await db.update(properties)
+      .set({
+        _deleted: true,
+        _synced: false,
+        _sentToServer: false
+      })
+      .where(eq(properties.id, id))
+
+    // 2. Queue for server sync
+    useWriteStore.getState().addPendingWrite({
+      id: writeId,
+      table: 'properties',
+      operation: 'delete',
+      data: { id }
+    })
+  }
+}
+```
+
+### Pattern 4: Through-the-Database Sync (Advanced)
+Uses PGlite shadow tables with Drizzle schema for automatic optimistic state:
+
+```typescript
+// src/db/client/shadow-schema.ts
+import { pgTable, uuid, varchar, text, boolean, timestamp, json } from 'drizzle-orm/pg-core'
+
+// Synced data tables (immutable from Electric)
+export const propertiesSynced = pgTable('properties_synced', {
+  id: uuid('id').primaryKey(),
+  propertyId: varchar('property_id', { length: 50 }).unique().notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  streetAddress: varchar('street_address', { length: 255 }).notNull(),
+  // ... other server columns
+  syncedAt: timestamp('_synced_at').defaultNow().notNull()
+})
+
+// Local optimistic writes
+export const propertiesLocal = pgTable('properties_local', {
+  id: uuid('id').primaryKey(),
+  propertyId: varchar('property_id', { length: 50 }),
+  name: varchar('name', { length: 255 }),
+  streetAddress: varchar('street_address', { length: 255 }),
+  // ... other columns
+  operation: varchar('_operation', { length: 10 }).default('update'), // 'insert', 'update', 'delete'
+  createdAt: timestamp('_created_at').defaultNow().notNull()
+})
+
+// Change log for background sync
+export const changes = pgTable('changes', {
+  id: integer('id').primaryKey(),
+  tableName: varchar('table_name', { length: 255 }).notNull(),
+  recordId: uuid('record_id').notNull(),
+  operation: varchar('operation', { length: 10 }).notNull(),
+  data: json('data').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  synced: boolean('synced').default(false).notNull()
+})
+
+// Combined view (what the application uses)
+export const properties = pgView('properties', {
+  id: uuid('id'),
+  propertyId: varchar('property_id', { length: 50 }),
+  name: varchar('name', { length: 255 }),
+  streetAddress: varchar('street_address', { length: 255 }),
+  // ... other columns
+  isLocal: boolean('_is_local').notNull()
+}).as(sql`
+  SELECT 
+    COALESCE(l.id, s.id) as id,
+    COALESCE(l.property_id, s.property_id) as property_id,
+    COALESCE(l.name, s.name) as name,
+    COALESCE(l.street_address, s.street_address) as street_address,
+    CASE WHEN l.id IS NOT NULL THEN TRUE ELSE FALSE END as _is_local
+  FROM properties_synced s
+  FULL OUTER JOIN properties_local l ON s.id = l.id
+  WHERE l._operation != 'delete' OR l.id IS NULL
+`)
+
+// INSTEAD OF triggers (using raw SQL in migration)
+export const shadowTableTriggers = sql`
+  CREATE OR REPLACE FUNCTION handle_property_write()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Insert/update local table
+    INSERT INTO properties_local (id, property_id, name, street_address, _operation)
+    VALUES (NEW.id, NEW.property_id, NEW.name, NEW.street_address, 
+            CASE WHEN OLD.id IS NULL THEN 'insert' ELSE 'update' END)
+    ON CONFLICT (id) DO UPDATE SET
+      property_id = NEW.property_id,
+      name = NEW.name,
+      street_address = NEW.street_address,
+      _operation = 'update';
+    
+    -- Log the change
+    INSERT INTO changes (table_name, record_id, operation, data)
+    VALUES ('properties', NEW.id, 
+            CASE WHEN OLD.id IS NULL THEN 'insert' ELSE 'update' END,
+            json_build_object(
+              'id', NEW.id,
+              'property_id', NEW.property_id,
+              'name', NEW.name,
+              'street_address', NEW.street_address
+            ));
+    
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE TRIGGER properties_write_trigger
+    INSTEAD OF INSERT OR UPDATE ON properties
+    FOR EACH ROW EXECUTE FUNCTION handle_property_write();
+`
+
+// Background sync utility
+export class DrizzleChangeSync {
+  constructor(private db: PGliteDatabase) {}
+
+  async syncPendingChanges() {
+    const pendingChanges = await this.db
+      .select()
+      .from(changes)
+      .where(eq(changes.synced, false))
+      .orderBy(changes.createdAt)
+
+    for (const change of pendingChanges) {
+      try {
+        await this.sendToServer(change)
+        
+        // Mark as synced
+        await this.db
+          .update(changes)
+          .set({ synced: true })
+          .where(eq(changes.id, change.id))
+      } catch (error) {
+        console.error('Sync failed for change:', change.id, error)
+        // Could implement sophisticated rollback here
+      }
+    }
+  }
+
+  private async sendToServer(change: any) {
+    return await fetch(`/api/write/${change.tableName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation: change.operation,
+        data: change.data
+      })
+    })
+  }
+
+  // Clean up local writes when Electric syncs real data
+  async cleanupSyncedWrite(table: string, recordId: string) {
+    const localTable = `${table}_local`
+    await this.db.execute(
+      sql`DELETE FROM ${sql.identifier(localTable)} WHERE id = ${recordId}`
+    )
+  }
+}
+```
+
+### Integration with React Components
+
+```typescript
+// src/components/property-list.tsx
+import { useLiveQuery } from 'drizzle-orm/pglite'
+import { properties } from '@/db/client/schema'
+import { optimisticWrites } from '@/stores/write-store'
+
+export function PropertyList() {
+  // Use Drizzle's live query with PGlite
+  const { data: propertyList, error } = useLiveQuery(
+    db.select().from(properties).where(eq(properties.isActive, true))
+  )
+
+  const handleUpdateProperty = async (id: string, updates: any) => {
+    // Uses our optimistic write pattern
+    await optimisticWrites.updateProperty(id, updates)
+    // UI updates instantly, sync happens in background
+  }
+
+  if (error) {
+    return <div>Error loading properties: {error.message}</div>
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {propertyList?.map((property) => (
+        <PropertyCard 
+          key={property.id}
+          property={property}
+          onUpdate={handleUpdateProperty}
+          isPending={!property._synced} // Show pending state
+        />
+      ))}
+    </div>
+  )
+}
+```
+
+## Write Pattern Recommendations for Our Stack
+
+### Recommended: Pattern 3 (Shared Persistent)
+**Best fit for Turns Management application:**
+- ✅ Works great with existing Zustand + Drizzle + PGlite
+- ✅ Persistent across sessions (critical for mobile users)
+- ✅ Shared state across all components
+- ✅ Moderate complexity, high benefit
+- ✅ Sophisticated conflict resolution
+- ✅ Works with Better Auth for user context
+
+### Alternative: Pattern 4 (Through-DB) for Advanced Users
+**Consider for power users or complex workflows:**
+- ✅ Pure local-first experience
+- ✅ Automatic state management via triggers
+- ⚠️ More complex schema and debugging
+- ⚠️ Rollback handling complexity
 
 ## Conflict Resolution
 

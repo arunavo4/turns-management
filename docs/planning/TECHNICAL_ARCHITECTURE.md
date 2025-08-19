@@ -95,27 +95,148 @@ A modern, **local-first** web application for property turns management, leverag
 
 ## Data Flow Patterns
 
-### Read Path (Primary)
+### Read Path (Primary) - Always Local
 ```
-User Action → PGlite Query → Instant UI Update
+User Action → PGlite Query → Instant UI Update (0-50ms)
                     ↑
             Electric Sync (Background)
                     ↑
               Neon Postgres
 ```
 
-### Write Path
+### Write Paths - Four Patterns Available
+
+Electric SQL supports multiple write patterns. Choose based on your application's complexity and offline requirements:
+
+#### Pattern 1: Online Writes 🌐
 ```
-User Action → Optimistic Local Update → UI Update
-                    ↓
-            Write to PGlite (synced=false)
-                    ↓
-            Batch sync to API
-                    ↓
-            Validate & Write to Neon
-                    ↓
-            Electric propagates to all clients
+User Action → Loading State → API Call → Neon Write → Electric Sync → All Clients
+                             ↓
+                        Network Required
 ```
+**Best for:** Dashboards, analytics, infrequent writes
+
+#### Pattern 2: Simple Optimistic State ⚡
+```
+User Action → Optimistic Update (useOptimistic) → Instant UI
+                         ↓                            ↑
+                    API Call (background)             |
+                         ↓                            |
+                    Neon Write → Electric Sync ------+
+                         ↓
+                   Replace optimistic data
+```
+**Best for:** Interactive apps, better UX
+
+#### Pattern 3: Shared Persistent Optimistic State 💾 (Recommended)
+```
+User Action → PGlite Write (optimistic) → Instant UI Update
+                         ↓                      ↑
+                 Zustand Store (persist)       |
+                         ↓                      |
+                Background Sync Queue          |
+                         ↓                      |
+                    API Call → Neon Write → Electric Sync
+                         ↓                      |
+                Clear from pending writes -----+
+```
+**Best for:** Turn Management app, offline support, shared state
+
+#### Pattern 4: Through-the-Database Sync 🗄️
+```
+User Action → Write to PGlite View → INSTEAD OF Trigger
+                         ↓                     ↓
+                   Instant UI          Shadow Table Update
+                                              ↓
+                                        Change Log Entry
+                                              ↓
+                                   Background Sync Process
+                                              ↓
+                                         API Call
+                                              ↓
+                                       Neon Write → Electric Sync
+```
+**Best for:** Pure local-first apps, automatic sync management
+
+## Write Pattern Decision Matrix
+
+| Requirement | Pattern 1 | Pattern 2 | Pattern 3 | Pattern 4 |
+|-------------|-----------|-----------|-----------|-----------|
+| **Instant UI** | ❌ | ✅ | ✅ | ✅ |
+| **Offline Writes** | ❌ | ⏱️ Temporary | ✅ Persistent | ✅ Persistent |
+| **Shared State** | N/A | ❌ | ✅ | ✅ |
+| **Complexity** | ⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **Setup Time** | 1 day | 2 days | 1 week | 2 weeks |
+| **Maintenance** | Low | Low | Medium | High |
+
+### Recommended for Turns Management: Pattern 3
+
+**Why Pattern 3 is ideal:**
+- ✅ **Zustand**: Already in our stack for state management
+- ✅ **PGlite**: Leverages our local database setup
+- ✅ **Drizzle ORM**: Works seamlessly with our schemas
+- ✅ **Persistence**: Critical for mobile property managers
+- ✅ **Shared State**: Turn updates visible across all components
+- ✅ **Better Auth**: Integrates with user context and permissions
+- ✅ **Balanced**: Complex enough for enterprise features, simple enough to maintain
+
+## Advanced Write Patterns
+
+### Conflict Resolution Strategies
+
+#### 1. Last Write Wins (Simple)
+```typescript
+function resolveConflict(local: any, server: any) {
+  if (server.version > local.version) {
+    return server  // Server wins
+  }
+  return local
+}
+```
+
+#### 2. Field-Level Merge (Sophisticated)
+```typescript
+function mergeChanges(local: any, server: any) {
+  const merged = { ...server }
+  
+  // Apply local changes that are newer
+  local._modifiedColumns?.forEach(field => {
+    if (local[`${field}_modifiedAt`] > server.updatedAt) {
+      merged[field] = local[field]
+    }
+  })
+  
+  return merged
+}
+```
+
+#### 3. User Resolution (Interactive)
+```typescript
+async function resolveConflict(local: any, server: any) {
+  // Show conflict resolution dialog
+  return await showConflictDialog({
+    local,
+    server,
+    onResolve: (resolution) => {
+      // Apply user's choice
+      switch (resolution.strategy) {
+        case 'keep-local': return local
+        case 'accept-server': return server
+        case 'merge': return resolution.merged
+      }
+    }
+  })
+}
+```
+
+### YAGNI Principle for Conflicts
+
+Research from Muse (Adam Wiggins) shows that **conflicts are extremely rare** in practice:
+- Most users don't edit the same record simultaneously
+- Good UX design (presence indicators, auto-save) prevents conflicts
+- Simple strategies (last-write-wins) work fine for 99% of use cases
+
+**Recommendation:** Start with simple conflict resolution, add complexity only when needed.
 
 ## Shape Definitions (Partial Replication)
 

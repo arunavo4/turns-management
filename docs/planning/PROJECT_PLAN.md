@@ -80,7 +80,49 @@ graph TB
 
 ### Phase 2: Local-First Data Layer (Weeks 3-4)
 
-#### Week 3: Sync Infrastructure
+#### Week 3: Write Pattern Selection & Implementation
+
+**⚡ Decision Point: Choose Write Pattern**
+
+Electric SQL supports 4 write patterns. We recommend **Pattern 3: Shared Persistent Optimistic State** for Turns Management.
+
+| Pattern | Complexity | Offline | Setup Time | Fits Turns Mgmt? |
+|---------|------------|---------|------------|------------------|
+| Pattern 1: Online | ⭐ | ❌ | 30min | ❌ Need offline |
+| Pattern 2: useOptimistic | ⭐⭐ | ⏱️ | 2hrs | ❌ Not persistent |
+| **Pattern 3: Zustand + PGlite** | ⭐⭐⭐ | ✅ | 1 day | ✅ **Recommended** |
+| Pattern 4: Shadow Tables | ⭐⭐⭐⭐ | ✅ | 3 days | ⚠️ Overkill |
+
+**Why Pattern 3 for Turns Management:**
+- ✅ **Zustand**: Already in our tech stack
+- ✅ **Persistent**: Property managers work offline
+- ✅ **Shared State**: Turn updates across all components  
+- ✅ **Better Auth**: Integrates with user permissions
+- ✅ **Mobile-First**: Critical for field workers
+
+- [ ] **Implement Pattern 3: Zustand Write Store**
+  ```typescript
+  // Zustand store with persistence
+  interface WriteStore {
+    pendingWrites: PendingWrite[]
+    rejectedWrites: PendingWrite[]
+    isOnline: boolean
+    addPendingWrite: (write) => void
+    syncPendingWrites: () => Promise<void>
+  }
+  
+  // Optimistic operations
+  export const optimisticWrites = {
+    updateProperty: async (id, updates) => {
+      // 1. Update PGlite (instant UI)
+      await db.update(properties).set(updates).where(eq(properties.id, id))
+      
+      // 2. Queue for server sync
+      writeStore.addPendingWrite({ table: 'properties', operation: 'update', data: updates })
+    }
+  }
+  ```
+
 - [ ] **Shape Definitions**
   ```typescript
   // Core shapes for initial sync
@@ -98,11 +140,11 @@ graph TB
   - Sync status tracking
   - Error recovery
 
-- [ ] **Write Queue**
-  - Optimistic updates
-  - Background sync
-  - Conflict detection
-  - Retry logic
+- [ ] **Background Sync Service**
+  - Auto-sync every 30 seconds when online
+  - Immediate sync when network returns
+  - Retry failed writes with exponential backoff
+  - Conflict resolution (last-write-wins initially)
 
 #### Week 4: Data Migration
 - [ ] **Odoo Data Export**
@@ -147,29 +189,55 @@ graph TB
   - Saved searches
   - Export functionality
 
-#### Week 7-8: Turn Management
-- [ ] **Kanban Board**
-  - Drag-drop with local state
-  - Stage transitions
-  - Real-time updates via Electric
-  - Offline queue for changes
+#### Week 7-8: Turn Management with Optimistic Updates
 
-- [ ] **Turn Workflow**
+- [ ] **Kanban Board with Pattern 3 Writes**
   ```typescript
-  // Optimistic stage change
-  await updateTurn(turnId, { 
-    stageId: newStageId,
-    _synced: false 
-  })
-  // UI updates instantly
-  // Sync happens in background
+  // Drag-drop uses optimistic writes
+  const handleStageDrop = async (turnId: string, newStageId: string) => {
+    // 1. Update local PGlite instantly
+    await optimisticWrites.updateTurn(turnId, { stageId: newStageId })
+    
+    // 2. UI updates immediately (no loading)
+    // 3. Background sync to server
+    // 4. Electric propagates to other users
+  }
+  ```
+  - Drag-drop with instant local updates
+  - Real-time propagation via Electric
+  - Offline-capable stage transitions
+  - Visual pending indicators
+
+- [ ] **Turn Workflow with Write Queuing**
+  ```typescript
+  // Complex approval workflow with offline support
+  async function submitForApproval(turnId: string) {
+    // Optimistic update
+    await optimisticWrites.updateTurn(turnId, {
+      approvalStatus: 'DFO_APPROVAL_NEEDED',
+      submittedAt: new Date()
+    })
+    
+    // Queue email notification (server-side)
+    writeStore.addPendingWrite({
+      table: 'notifications',
+      operation: 'create',
+      data: { type: 'approval_needed', turnId }
+    })
+  }
   ```
 
 - [ ] **Approval System**
-  - DFO/HO approval flows
-  - Notification system
-  - Audit logging
-  - Email integration
+  - DFO/HO approval flows with optimistic state
+  - Notification system via write queue
+  - Audit logging (every action tracked)
+  - Email integration (queued when offline)
+
+- [ ] **Write Pattern Validation**
+  - Test offline → online → sync scenarios
+  - Verify conflict resolution works
+  - Validate pending write persistence
+  - Performance test with 100+ pending writes
 
 ### Phase 4: Advanced Features (Weeks 9-12)
 
