@@ -12,7 +12,7 @@ import {
   IconUser,
   IconClock,
   IconAlertTriangle,
-  IconCheckCircle,
+  IconCircleCheck,
   IconRefresh,
   IconEye,
   IconEdit,
@@ -73,7 +73,7 @@ const statusColumns = [
     id: 'approved',
     title: 'Approved',
     color: 'bg-green-100 border-green-300',
-    icon: IconCheckCircle,
+    icon: IconCircleCheck,
     iconColor: 'text-green-600'
   },
   {
@@ -87,7 +87,7 @@ const statusColumns = [
     id: 'completed',
     title: 'Completed',
     color: 'bg-gray-100 border-gray-300',
-    icon: IconCheckCircle,
+    icon: IconCircleCheck,
     iconColor: 'text-gray-600'
   }
 ];
@@ -327,7 +327,7 @@ export default function TurnsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
-              <IconCheckCircle className="h-4 w-4 text-muted-foreground" />
+              <IconCircleCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{mockDashboardMetrics.completionRate}%</div>
