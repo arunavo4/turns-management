@@ -18,6 +18,8 @@ import {
   IconChevronDown,
   IconLogout,
   IconUser,
+  IconChevronLeft,
+  IconChevronRight,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,6 +85,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleSignOut = () => {
     // Mock sign out function
@@ -102,32 +105,47 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Sidebar */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform duration-200 lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 bg-card border-r transform transition-all duration-200 lg:translate-x-0",
+          sidebarCollapsed ? "w-16" : "w-64",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-between px-6 border-b">
-            <div className="flex items-center space-x-3">
+          <div className={cn(
+            "flex h-16 items-center border-b",
+            sidebarCollapsed ? "justify-center px-4" : "justify-between px-6"
+          )}>
+            {sidebarCollapsed ? (
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
                 <IconRefresh className="h-5 w-5 text-primary-foreground" />
               </div>
-              <div>
-                <h2 className="text-lg font-semibold">Turns Management</h2>
-                <p className="text-xs text-muted-foreground">Property ERP</p>
-              </div>
-            </div>
-            <button 
-              className="lg:hidden" 
-              onClick={() => setSidebarOpen(false)}
-            >
-              <IconX className="h-5 w-5" />
-            </button>
+            ) : (
+              <>
+                <div className="flex items-center space-x-3">
+                  <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+                    <IconRefresh className="h-5 w-5 text-primary-foreground" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold">Turns Management</h2>
+                    <p className="text-xs text-muted-foreground">Property ERP</p>
+                  </div>
+                </div>
+                <button 
+                  className="lg:hidden" 
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <IconX className="h-5 w-5" />
+                </button>
+              </>
+            )}
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
+          <nav className={cn(
+            "flex-1 space-y-1 overflow-y-auto",
+            sidebarCollapsed ? "p-2" : "p-4"
+          )}>
             {navigation.map((item) => {
               const isActive = pathname === item.href || 
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -137,31 +155,59 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   key={item.name}
                   href={item.href}
                   className={cn(
-                    "flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                    "flex items-center rounded-md transition-colors group",
+                    sidebarCollapsed 
+                      ? "justify-center px-2 py-3" 
+                      : "justify-between px-3 py-2",
+                    "text-sm font-medium",
                     isActive
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                   onClick={() => setSidebarOpen(false)}
+                  title={sidebarCollapsed ? item.name : undefined}
                 >
-                  <div className="flex items-center">
-                    <item.icon
-                      className={cn(
-                        "mr-3 h-4 w-4",
-                        isActive
-                          ? "text-primary-foreground"
-                          : "text-muted-foreground"
+                  {sidebarCollapsed ? (
+                    <div className="relative">
+                      <item.icon
+                        className={cn(
+                          "h-5 w-5",
+                          isActive
+                            ? "text-primary-foreground"
+                            : "text-muted-foreground"
+                        )}
+                      />
+                      {item.badge && (
+                        <Badge
+                          variant="secondary"
+                          className="absolute -top-2 -right-2 h-4 w-4 p-0 text-xs flex items-center justify-center"
+                        >
+                          {item.badge}
+                        </Badge>
                       )}
-                    />
-                    <span>{item.name}</span>
-                  </div>
-                  {item.badge && (
-                    <Badge
-                      variant="secondary"
-                      className="ml-auto h-5 px-1.5 text-xs"
-                    >
-                      {item.badge}
-                    </Badge>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center">
+                        <item.icon
+                          className={cn(
+                            "mr-3 h-4 w-4",
+                            isActive
+                              ? "text-primary-foreground"
+                              : "text-muted-foreground"
+                          )}
+                        />
+                        <span>{item.name}</span>
+                      </div>
+                      {item.badge && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-auto h-5 px-1.5 text-xs"
+                        >
+                          {item.badge}
+                        </Badge>
+                      )}
+                    </>
                   )}
                 </Link>
               );
@@ -169,25 +215,67 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </nav>
 
           {/* User section */}
-          <div className="border-t p-4">
-            <div className="flex items-center">
-              <Avatar className="h-10 w-10 flex-none">
-                <AvatarImage src="/avatar.jpg" className="object-cover" />
-                <AvatarFallback className="h-10 w-10 flex items-center justify-center">
-                  SJ
-                </AvatarFallback>
-              </Avatar>
-              <div className="ml-3 flex-1">
-                <p className="text-sm font-medium">Sarah Johnson</p>
-                <p className="text-xs text-muted-foreground">Property Manager</p>
+          <div className={cn(
+            "border-t",
+            sidebarCollapsed ? "p-2" : "p-4"
+          )}>
+            {sidebarCollapsed ? (
+              <div className="flex justify-center">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="/avatar.jpg" className="object-cover" />
+                  <AvatarFallback className="h-8 w-8 flex items-center justify-center">
+                    SJ
+                  </AvatarFallback>
+                </Avatar>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center">
+                <Avatar className="h-10 w-10 flex-none">
+                  <AvatarImage src="/avatar.jpg" className="object-cover" />
+                  <AvatarFallback className="h-10 w-10 flex items-center justify-center">
+                    SJ
+                  </AvatarFallback>
+                </Avatar>
+                <div className="ml-3 flex-1">
+                  <p className="text-sm font-medium">Sarah Johnson</p>
+                  <p className="text-xs text-muted-foreground">Property Manager</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Collapse Toggle Button */}
+          <div className={cn(
+            "border-t p-2 hidden lg:block",
+            sidebarCollapsed ? "flex justify-center" : ""
+          )}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className={cn(
+                "transition-colors",
+                sidebarCollapsed ? "w-full justify-center" : "w-full justify-start"
+              )}
+            >
+              {sidebarCollapsed ? (
+                <IconChevronRight className="h-4 w-4" />
+              ) : (
+                <>
+                  <IconChevronLeft className="h-4 w-4 mr-2" />
+                  <span>Collapse</span>
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64">
+      <div className={cn(
+        "transition-all duration-200",
+        sidebarCollapsed ? "lg:pl-16" : "lg:pl-64"
+      )}>
         {/* Top header */}
         <header className="sticky top-0 z-30 bg-background border-b">
           <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">

@@ -93,37 +93,37 @@ const statusColumns = [
   {
     id: 'requested',
     title: 'Requested',
-    color: 'bg-yellow-100 border-yellow-300',
     icon: IconAlertTriangle,
-    iconColor: 'text-yellow-600'
+    iconColor: 'text-amber-500',
+    bgColor: 'bg-amber-50'
   },
   {
     id: 'dfo_review',
     title: 'DFO Review',
-    color: 'bg-blue-100 border-blue-300',
     icon: IconEye,
-    iconColor: 'text-blue-600'
+    iconColor: 'text-blue-500',
+    bgColor: 'bg-blue-50'
   },
   {
     id: 'approved',
     title: 'Approved',
-    color: 'bg-green-100 border-green-300',
     icon: IconCircleCheck,
-    iconColor: 'text-green-600'
+    iconColor: 'text-emerald-500',
+    bgColor: 'bg-emerald-50'
   },
   {
     id: 'in_progress',
     title: 'In Progress',
-    color: 'bg-orange-100 border-orange-300',
     icon: IconRefresh,
-    iconColor: 'text-orange-600'
+    iconColor: 'text-orange-500',
+    bgColor: 'bg-orange-50'
   },
   {
     id: 'completed',
     title: 'Completed',
-    color: 'bg-gray-100 border-gray-300',
     icon: IconCircleCheck,
-    iconColor: 'text-gray-600'
+    iconColor: 'text-slate-500',
+    bgColor: 'bg-slate-50'
   }
 ];
 
@@ -189,20 +189,20 @@ export default function TurnsPage() {
     const isOverdue = dueInDays !== null && dueInDays < 0;
     
     return (
-      <Card className="mb-3 hover:shadow-md transition-shadow duration-200 cursor-pointer">
-        <CardContent className="p-4">
-          <div className="space-y-3">
+      <Card className="mb-2 hover:shadow-sm transition-all duration-150 cursor-pointer group border-0 shadow-sm hover:bg-gray-50/50">
+        <CardContent className="p-3">
+          <div className="space-y-2.5">
             {/* Header */}
             <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <h4 className="font-medium text-sm">{turnData.turn.turnNumber}</h4>
-                <p className="text-xs text-muted-foreground line-clamp-2">
+              <div className="min-w-0 flex-1">
+                <h4 className="font-semibold text-sm text-gray-900 mb-1">{turnData.turn.turnNumber}</h4>
+                <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
                   {turnData.turn.scopeOfWork || "No scope defined"}
                 </p>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                     <IconDots className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -221,9 +221,9 @@ export default function TurnsPage() {
 
             {/* Property Info */}
             {turnData.property && (
-              <div className="space-y-2">
-                <div className="text-sm font-medium">{turnData.property.name}</div>
-                <div className="flex items-center text-xs text-muted-foreground">
+              <div>
+                <div className="text-sm font-medium text-gray-900 mb-1">{turnData.property.name}</div>
+                <div className="flex items-center text-xs text-gray-500">
                   <IconMapPin className="mr-1 h-3 w-3" />
                   {turnData.property.city}, {turnData.property.state}
                 </div>
@@ -234,19 +234,17 @@ export default function TurnsPage() {
             <div className="flex items-center justify-between">
               {getPriorityBadge(turnData.turn.priority)}
               {(turnData.turn.actualCost || turnData.turn.estimatedCost) && (
-                <div className="text-sm font-medium">
+                <div className="text-sm font-semibold text-gray-900">
                   {formatCurrency(parseFloat(turnData.turn.actualCost || turnData.turn.estimatedCost || "0"))}
                 </div>
               )}
             </div>
 
-            {/* Progress - removed for now as we don't have this field yet */}
-
             {/* Due Date */}
             {turnData.turn.turnDueDate && (
               <div className="flex items-center text-xs">
-                <IconCalendar className="mr-1 h-3 w-3" />
-                <span className={isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}>
+                <IconCalendar className="mr-1 h-3 w-3 text-gray-400" />
+                <span className={isOverdue ? "text-red-600 font-medium" : "text-gray-500"}>
                   {isOverdue ? `${Math.abs(dueInDays!)} days overdue` : 
                    dueInDays === 0 ? "Due today" :
                    dueInDays === 1 ? "Due tomorrow" :
@@ -258,29 +256,31 @@ export default function TurnsPage() {
             {/* Assigned Vendor */}
             {turnData.vendor && (
               <div className="flex items-center text-xs">
-                <Avatar className="h-5 w-5 mr-2">
-                  <AvatarFallback className="text-xs">
+                <Avatar className="h-4 w-4 mr-1.5">
+                  <AvatarFallback className="text-xs bg-gray-100 text-gray-600">
                     {turnData.vendor.companyName.substring(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-muted-foreground truncate">
+                <span className="text-gray-500 truncate text-xs">
                   {turnData.vendor.companyName}
                 </span>
               </div>
             )}
 
             {/* Utilities Status */}
-            <div className="flex gap-2">
-              {turnData.turn.powerStatus && (
-                <Badge variant="outline" className="text-xs px-1.5 py-0.5">Power On</Badge>
-              )}
-              {turnData.turn.waterStatus && (
-                <Badge variant="outline" className="text-xs px-1.5 py-0.5">Water On</Badge>
-              )}
-              {turnData.turn.gasStatus && (
-                <Badge variant="outline" className="text-xs px-1.5 py-0.5">Gas On</Badge>
-              )}
-            </div>
+            {(turnData.turn.powerStatus || turnData.turn.waterStatus || turnData.turn.gasStatus) && (
+              <div className="flex gap-1 flex-wrap">
+                {turnData.turn.powerStatus && (
+                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 text-gray-600 border-gray-200">Power On</Badge>
+                )}
+                {turnData.turn.waterStatus && (
+                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 text-gray-600 border-gray-200">Water On</Badge>
+                )}
+                {turnData.turn.gasStatus && (
+                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 text-gray-600 border-gray-200">Gas On</Badge>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -291,24 +291,24 @@ export default function TurnsPage() {
     const Icon = column.icon;
     
     return (
-      <div className="flex flex-col min-h-96">
-        <div className={`rounded-t-lg p-4 border ${column.color}`}>
+      <div className="flex flex-col min-h-96 flex-1 border-r border-gray-200 last:border-r-0">
+        <div className={`${column.bgColor} border-b border-gray-200 px-3 py-2.5`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Icon className={`h-4 w-4 ${column.iconColor}`} />
-              <h3 className="font-medium">{column.title}</h3>
+              <h3 className="font-semibold text-sm text-gray-900">{column.title}</h3>
             </div>
-            <Badge variant="secondary" className="h-5 text-xs">
+            <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-white/60 text-xs font-medium text-gray-600">
               {columnTurns.length}
-            </Badge>
+            </span>
           </div>
         </div>
-        <div className="flex-1 p-3 border-l border-r border-b rounded-b-lg bg-muted/20 min-h-80">
+        <div className="flex-1 p-2 bg-gray-50/30 min-h-80">
           {columnTurns.map((turnData) => (
             <TurnCard key={turnData.turn.id} turnData={turnData} />
           ))}
           {columnTurns.length === 0 && (
-            <div className="text-center text-muted-foreground text-sm py-8">
+            <div className="text-center text-gray-500 text-sm py-8">
               No turns in this stage
             </div>
           )}
@@ -448,13 +448,13 @@ export default function TurnsPage() {
         {/* Kanban Board */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Turn Workflow</h2>
-            <div className="text-sm text-muted-foreground">
+            <h2 className="text-lg font-semibold text-gray-900">Turn Workflow</h2>
+            <div className="text-sm text-gray-500">
               {filteredTurns.length} total turns
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="flex flex-col lg:flex-row bg-white rounded-lg border border-gray-200 overflow-hidden">
             {statusColumns.map((column) => {
               const columnTurns = filteredTurns.filter(turnData => turnData.turn.status === column.id);
               return (
