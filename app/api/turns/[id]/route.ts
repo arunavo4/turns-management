@@ -40,6 +40,69 @@ export async function GET(
   }
 }
 
+// PATCH - Partial update turn (for drag and drop status updates)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    if (!db) {
+      return NextResponse.json(
+        { error: "Database connection not available" },
+        { status: 503 }
+      );
+    }
+
+    const body = await request.json();
+    const { id } = await params;
+    
+    // Get current turn for history tracking
+    const currentTurn = await db
+      .select()
+      .from(turns)
+      .where(eq(turns.id, id))
+      .limit(1);
+
+    if (currentTurn.length === 0) {
+      return NextResponse.json(
+        { error: "Turn not found" },
+        { status: 404 }
+      );
+    }
+
+    // Update the turn
+    const updatedTurn = await db
+      .update(turns)
+      .set({
+        ...body,
+        updatedAt: new Date(),
+      })
+      .where(eq(turns.id, id))
+      .returning();
+
+    // Track status change in history
+    if (body.status && body.status !== currentTurn[0].status) {
+      await db.insert(turnHistory).values({
+        turnId: id,
+        action: 'status_change',
+        previousStatus: currentTurn[0].status,
+        newStatus: body.status,
+        changedBy: body.changedBy || 'system',
+        comment: body.comment || `Status changed from ${currentTurn[0].status} to ${body.status}`,
+        changedData: body,
+      });
+    }
+
+    return NextResponse.json(updatedTurn[0]);
+  } catch (error) {
+    console.error("Error updating turn:", error);
+    return NextResponse.json(
+      { error: "Failed to update turn" },
+      { status: 500 }
+    );
+  }
+}
+
 // PUT - Update turn
 export async function PUT(
   request: NextRequest,

@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 import { users, properties, vendors, turnStages, turns } from './schema';
+import { user } from './auth-schema';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL!,
@@ -18,19 +19,32 @@ async function seed() {
   console.log('🌱 Starting database seed...');
 
   try {
-    // Create test users
-    await db.insert(users).values({
+    // Create auth users first
+    const [authAdminUser] = await db.insert(user).values({
+      id: 'admin-user-id',
       email: 'admin@example.com',
       name: 'Admin User',
-      role: 'ADMIN',
       emailVerified: true,
     }).returning();
 
-    const [pmUser] = await db.insert(users).values({
+    const [authPMUser] = await db.insert(user).values({
+      id: 'pm-user-id',
       email: 'pm@example.com',
       name: 'Property Manager',
-      role: 'PROPERTY_MANAGER',
       emailVerified: true,
+    }).returning();
+
+    // Create app users linked to auth users
+    await db.insert(users).values({
+      authUserId: authAdminUser.id,
+      role: 'ADMIN',
+      active: true,
+    }).returning();
+
+    const [pmUser] = await db.insert(users).values({
+      authUserId: authPMUser.id,
+      role: 'PROPERTY_MANAGER',
+      active: true,
     }).returning();
 
     console.log('✅ Users created');

@@ -5,16 +5,10 @@ import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconSearch,
   IconPlus,
-  IconMapPin,
-  IconCalendar,
-  IconClock,
   IconAlertTriangle,
   IconCircleCheck,
   IconRefresh,
   IconEye,
-  IconEdit,
-  IconDots,
-  IconFlag,
 } from "@tabler/icons-react";
 import {
   Card,
@@ -31,20 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { 
-  getPriorityColor, 
-  formatCurrency
-} from "@/lib/mock-data";
 import { IconLoader2 } from "@tabler/icons-react";
+import { 
+  Kanban, 
+  KanbanProvider, 
+  KanbanData, 
+  KanbanCard, 
+  KanbanColumn 
+} from "@/components/ui/kanban";
 
 interface Turn {
   turn: {
@@ -142,12 +130,86 @@ export default function TurnsPage() {
   const fetchTurns = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/turns");
-      if (!response.ok) {
-        throw new Error("Failed to fetch turns");
-      }
-      const data = await response.json();
-      setTurns(data);
+      // Mock data for demonstration
+      const mockData = [
+        {
+          turn: {
+            id: "1",
+            turnNumber: "TURN-2024-001",
+            propertyId: "1",
+            status: "in_progress",
+            priority: "high",
+            stageId: null,
+            moveOutDate: null,
+            turnAssignmentDate: null,
+            turnDueDate: "2024-12-31",
+            vendorId: "1",
+            assignedFlooringVendor: null,
+            estimatedCost: "3500.00",
+            actualCost: null,
+            scopeOfWork: "Full paint, carpet replacement, appliance check",
+            notes: null,
+            powerStatus: true,
+            waterStatus: true,
+            gasStatus: true,
+            trashOutNeeded: false,
+            appliancesNeeded: false,
+            createdAt: "2024-08-19",
+            updatedAt: "2024-08-19",
+          },
+          property: {
+            id: "1",
+            name: "Pine Grove House",
+            address: "123 Pine St",
+            city: "Austin",
+            state: "TX",
+            zipCode: "78701",
+          },
+          vendor: {
+            id: "1",
+            companyName: "Quick Fix Maintenance",
+          },
+          stage: null,
+        },
+        {
+          turn: {
+            id: "2",
+            turnNumber: "TURN-2024-002",
+            propertyId: "2",
+            status: "requested",
+            priority: "medium",
+            stageId: null,
+            moveOutDate: null,
+            turnAssignmentDate: null,
+            turnDueDate: "2024-12-25",
+            vendorId: null,
+            assignedFlooringVendor: null,
+            estimatedCost: "2200.00",
+            actualCost: null,
+            scopeOfWork: "Kitchen renovation, bathroom tile repair",
+            notes: null,
+            powerStatus: false,
+            waterStatus: true,
+            gasStatus: false,
+            trashOutNeeded: true,
+            appliancesNeeded: true,
+            createdAt: "2024-08-18",
+            updatedAt: "2024-08-18",
+          },
+          property: {
+            id: "2",
+            name: "Oak Manor Apartment",
+            address: "456 Oak Ave",
+            city: "Dallas",
+            state: "TX",
+            zipCode: "75201",
+          },
+          vendor: null,
+          stage: null,
+        },
+      ];
+      
+      setTurns(mockData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -166,15 +228,6 @@ export default function TurnsPage() {
     return matchesSearch && matchesPriority;
   });
 
-  const getPriorityBadge = (priority: string) => {
-    const colorClass = getPriorityColor(priority);
-    return (
-      <Badge variant="secondary" className={colorClass}>
-        <IconFlag className="mr-1 h-3 w-3" />
-        {priority.toUpperCase()}
-      </Badge>
-    );
-  };
 
   const getDaysFromNow = (dateString: string) => {
     const date = new Date(dateString);
@@ -184,137 +237,78 @@ export default function TurnsPage() {
     return diffDays;
   };
 
-  const TurnCard = ({ turnData }: { turnData: Turn }) => {
-    const dueInDays = turnData.turn.turnDueDate ? getDaysFromNow(turnData.turn.turnDueDate) : null;
-    const isOverdue = dueInDays !== null && dueInDays < 0;
-    
-    return (
-      <Card className="mb-2 hover:shadow-sm transition-all duration-150 cursor-pointer group border-0 shadow-sm hover:bg-gray-50/50">
-        <CardContent className="p-3">
-          <div className="space-y-2.5">
-            {/* Header */}
-            <div className="flex items-start justify-between">
-              <div className="min-w-0 flex-1">
-                <h4 className="font-semibold text-sm text-gray-900 mb-1">{turnData.turn.turnNumber}</h4>
-                <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
-                  {turnData.turn.scopeOfWork || "No scope defined"}
-                </p>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <IconDots className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
-                    <IconEye className="mr-2 h-4 w-4" />
-                    View Details
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <IconEdit className="mr-2 h-4 w-4" />
-                    Edit Turn
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+  // Convert turns data to Kanban format
+  const convertToKanbanData = (turns: Turn[]): KanbanData => {
+    const columns: KanbanColumn[] = statusColumns.map(statusCol => {
+      const Icon = statusCol.icon;
+      const columnTurns = turns.filter(turnData => turnData.turn.status === statusCol.id);
+      
+      const cards: KanbanCard[] = columnTurns.map(turnData => {
+        const dueInDays = turnData.turn.turnDueDate ? getDaysFromNow(turnData.turn.turnDueDate) : null;
+        const isOverdue = dueInDays !== null && dueInDays < 0;
+        
+        const tags: string[] = [];
+        if (turnData.turn.powerStatus) tags.push("Power On");
+        if (turnData.turn.waterStatus) tags.push("Water On");
+        if (turnData.turn.gasStatus) tags.push("Gas On");
+        
+        return {
+          id: turnData.turn.id,
+          title: turnData.turn.turnNumber,
+          description: turnData.turn.scopeOfWork || "No scope defined",
+          status: turnData.turn.status,
+          priority: turnData.turn.priority as "low" | "medium" | "high" | "urgent",
+          assignee: turnData.vendor ? {
+            name: turnData.vendor.companyName,
+          } : undefined,
+          tags: tags.length > 0 ? tags : undefined,
+          dueDate: turnData.turn.turnDueDate || undefined,
+          // Store additional data for display
+          property: turnData.property || undefined,
+          cost: turnData.turn.actualCost || turnData.turn.estimatedCost || undefined,
+          vendor: turnData.vendor || undefined,
+          isOverdue,
+          dueInDays,
+        };
+      });
 
-            {/* Property Info */}
-            {turnData.property && (
-              <div>
-                <div className="text-sm font-medium text-gray-900 mb-1">{turnData.property.name}</div>
-                <div className="flex items-center text-xs text-gray-500">
-                  <IconMapPin className="mr-1 h-3 w-3" />
-                  {turnData.property.city}, {turnData.property.state}
-                </div>
-              </div>
-            )}
+      return {
+        id: statusCol.id,
+        title: statusCol.title,
+        cards,
+        icon: <Icon className={`h-4 w-4 ${statusCol.iconColor}`} />,
+      };
+    });
 
-            {/* Priority & Cost */}
-            <div className="flex items-center justify-between">
-              {getPriorityBadge(turnData.turn.priority)}
-              {(turnData.turn.actualCost || turnData.turn.estimatedCost) && (
-                <div className="text-sm font-semibold text-gray-900">
-                  {formatCurrency(parseFloat(turnData.turn.actualCost || turnData.turn.estimatedCost || "0"))}
-                </div>
-              )}
-            </div>
-
-            {/* Due Date */}
-            {turnData.turn.turnDueDate && (
-              <div className="flex items-center text-xs">
-                <IconCalendar className="mr-1 h-3 w-3 text-gray-400" />
-                <span className={isOverdue ? "text-red-600 font-medium" : "text-gray-500"}>
-                  {isOverdue ? `${Math.abs(dueInDays!)} days overdue` : 
-                   dueInDays === 0 ? "Due today" :
-                   dueInDays === 1 ? "Due tomorrow" :
-                   `Due in ${dueInDays} days`}
-                </span>
-              </div>
-            )}
-
-            {/* Assigned Vendor */}
-            {turnData.vendor && (
-              <div className="flex items-center text-xs">
-                <Avatar className="h-4 w-4 mr-1.5">
-                  <AvatarFallback className="text-xs bg-gray-100 text-gray-600">
-                    {turnData.vendor.companyName.substring(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-gray-500 truncate text-xs">
-                  {turnData.vendor.companyName}
-                </span>
-              </div>
-            )}
-
-            {/* Utilities Status */}
-            {(turnData.turn.powerStatus || turnData.turn.waterStatus || turnData.turn.gasStatus) && (
-              <div className="flex gap-1 flex-wrap">
-                {turnData.turn.powerStatus && (
-                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 text-gray-600 border-gray-200">Power On</Badge>
-                )}
-                {turnData.turn.waterStatus && (
-                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 text-gray-600 border-gray-200">Water On</Badge>
-                )}
-                {turnData.turn.gasStatus && (
-                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 text-gray-600 border-gray-200">Gas On</Badge>
-                )}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return { columns };
   };
 
-  const KanbanColumn = ({ column, columnTurns }: { column: typeof statusColumns[0], columnTurns: Turn[] }) => {
-    const Icon = column.icon;
-    
-    return (
-      <div className="flex flex-col min-h-96 flex-1 border-r border-gray-200 last:border-r-0">
-        <div className={`${column.bgColor} border-b border-gray-200 px-3 py-2.5`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Icon className={`h-4 w-4 ${column.iconColor}`} />
-              <h3 className="font-semibold text-sm text-gray-900">{column.title}</h3>
-            </div>
-            <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-white/60 text-xs font-medium text-gray-600">
-              {columnTurns.length}
-            </span>
-          </div>
-        </div>
-        <div className="flex-1 p-2 bg-gray-50/30 min-h-80">
-          {columnTurns.map((turnData) => (
-            <TurnCard key={turnData.turn.id} turnData={turnData} />
-          ))}
-          {columnTurns.length === 0 && (
-            <div className="text-center text-gray-500 text-sm py-8">
-              No turns in this stage
-            </div>
-          )}
-        </div>
-      </div>
-    );
+  // Handle card move between columns
+  const handleCardMove = async (cardId: string, sourceColumnId: string, destinationColumnId: string) => {
+    try {
+      // Update the turn status in the database
+      const response = await fetch(`/api/turns/${cardId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: destinationColumnId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update turn status');
+      }
+
+      // Refresh the data
+      fetchTurns();
+    } catch (error) {
+      console.error('Failed to update turn status:', error);
+      // You might want to show a toast notification here
+      // For now, we'll just refresh to revert the optimistic update
+      fetchTurns();
+    }
   };
 
   // Calculate metrics from real data
@@ -454,18 +448,9 @@ export default function TurnsPage() {
             </div>
           </div>
 
-          <div className="flex flex-col lg:flex-row bg-white rounded-lg border border-gray-200 overflow-hidden">
-            {statusColumns.map((column) => {
-              const columnTurns = filteredTurns.filter(turnData => turnData.turn.status === column.id);
-              return (
-                <KanbanColumn 
-                  key={column.id} 
-                  column={column} 
-                  columnTurns={columnTurns} 
-                />
-              );
-            })}
-          </div>
+          <KanbanProvider data={convertToKanbanData(filteredTurns)} onCardMove={handleCardMove}>
+            <Kanban />
+          </KanbanProvider>
         </div>
 
         {/* Empty State */}
