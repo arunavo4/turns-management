@@ -1,688 +1,357 @@
-# Turns Management API Documentation
+# Turns Management - Local-First API Documentation
 
 ## Overview
 
-This document outlines the API structure for the Turns Management application, using a combination of REST endpoints and tRPC procedures for type-safe communication.
+Minimal API surface for the Turns Management application, focusing on write operations and sync proxies. Most data operations happen locally via Electric SQL sync, dramatically reducing API calls and improving performance.
 
-## Authentication
+## Architecture Principles
 
-All API endpoints require authentication except for public endpoints marked with 🌐.
+### Local-First API Design
+- **Reads**: Via Electric SQL shapes (no API calls)
+- **Writes**: Optimistic local updates with background sync
+- **Sync**: Electric handles real-time propagation
+- **API**: Only for authentication, complex business logic, and external integrations
 
-### Authentication Headers
-```http
-Authorization: Bearer <jwt_token>
-X-API-Key: <api_key> (optional for service-to-service)
+## Database Connection Strategy
+
+### Neon Read Replicas Usage
+
+#### Services Using Read Replicas ✅
+These services can safely use Neon read replicas for better performance:
+
+```typescript
+// Read replica connection string
+const READ_REPLICA_URL = process.env.NEON_READ_REPLICA_URL
+
+// Services that can use read replicas:
+const readOnlyServices = {
+  // Electric SQL Service (primary user of read replica)
+  electric: {
+    url: READ_REPLICA_URL,
+    usage: 'Streaming changes via logical replication',
+    load: 'HIGH',
+    benefit: 'Offloads all shape subscriptions from primary'
+  },
+  
+  // Reporting & Analytics
+  reporting: {
+    url: READ_REPLICA_URL,
+    usage: 'Complex aggregation queries',
+    load: 'MEDIUM',
+    benefit: 'Heavy queries dont impact write performance'
+  },
+  
+  // Export Operations
+  exports: {
+    url: READ_REPLICA_URL,
+    usage: 'Bulk data exports to CSV/Excel',
+    load: 'LOW',
+    benefit: 'Large data reads isolated from primary'
+  },
+  
+  // Audit Log Queries
+  auditViewer: {
+    url: READ_REPLICA_URL,
+    usage: 'Historical audit trail queries',
+    load: 'LOW',
+    benefit: 'Read-heavy audit searches offloaded'
+  },
+  
+  // Public Dashboard (if any)
+  publicMetrics: {
+    url: READ_REPLICA_URL,
+    usage: 'Aggregated statistics',
+    load: 'LOW',
+    benefit: 'Public reads dont impact operations'
+  }
+}
+```
+
+#### Services Requiring Primary Database ❌
+These must use the primary database connection:
+
+```typescript
+// Primary connection (pooled)
+const PRIMARY_URL = process.env.NEON_DATABASE_POOLED_URL
+
+// Services that MUST use primary:
+const primaryOnlyServices = {
+  // Authentication
+  auth: {
+    url: PRIMARY_URL,
+    reason: 'Session writes and user updates'
+  },
+  
+  // Write Operations
+  writes: {
+    url: PRIMARY_URL,
+    reason: 'All INSERT/UPDATE/DELETE operations'
+  },
+  
+  // Transactions
+  transactions: {
+    url: PRIMARY_URL,
+    reason: 'Multi-table atomic operations'
+  },
+  
+  // Migrations
+  migrations: {
+    url: process.env.NEON_DATABASE_URL, // Direct connection
+    reason: 'Schema changes require primary'
+  }
+}
+```
+
+## Authentication API
+
+### Better-Auth Configuration
+```typescript
+// src/lib/auth/index.ts
+import { betterAuth } from 'better-auth'
+import { drizzleAdapter } from '@better-auth/drizzle-adapter'
+import { db } from '@/db/server' // Uses PRIMARY connection
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: 'pg'
+  }),
+  emailAndPassword: {
+    enabled: true
+  },
+  session: {
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+  }
+})
 ```
 
 ### Authentication Endpoints
 
 #### 🌐 POST `/api/auth/login`
 ```typescript
-// Request
+// Uses PRIMARY database for session creation
 {
   email: string
   password: string
-}
-
-// Response
-{
-  user: {
-    id: string
-    email: string
-    role: UserRole
-    firstName: string
-    lastName: string
-  }
+} → {
+  user: User
   token: string
-  refreshToken: string
-  expiresIn: number
+  shapes: string[] // Shapes to subscribe to based on role
 }
 ```
 
-#### 🌐 POST `/api/auth/register`
+#### 🌐 POST `/api/auth/logout`
 ```typescript
-// Request
-{
-  email: string
-  password: string
-  firstName: string
-  lastName: string
-  role?: UserRole // Default: USER
-}
-
-// Response
-{
-  message: string
-  userId: string
-}
+// Uses PRIMARY database for session deletion
+{} → { success: boolean }
 ```
 
-#### POST `/api/auth/refresh`
+## Sync Proxy Endpoints
+
+### Electric Shape Proxy
+Proxies requests to Electric SQL service which uses READ REPLICA:
+
+#### GET `/api/sync/[table]`
 ```typescript
-// Request
-{
-  refreshToken: string
-}
-
-// Response
-{
-  token: string
-  refreshToken: string
-  expiresIn: number
-}
-```
-
-#### POST `/api/auth/logout`
-```typescript
-// Response
-{
-  message: string
-}
-```
-
-## tRPC Router Structure
-
-### Root Router Configuration
-```typescript
-export const appRouter = router({
-  auth: authRouter,
-  property: propertyRouter,
-  turn: turnRouter,
-  vendor: vendorRouter,
-  utility: utilityRouter,
-  report: reportRouter,
-  user: userRouter,
-  notification: notificationRouter,
-  document: documentRouter
-})
-
-export type AppRouter = typeof appRouter
-```
-
-## Property Management API
-
-### tRPC Procedures
-
-#### `property.getAll`
-```typescript
-// Input
-{
-  page?: number
-  limit?: number
-  search?: string
-  filters?: {
-    isActive?: boolean
-    isCore?: boolean
-    propertyManagerId?: string
-    state?: string
-    city?: string
+// Next.js API Route that proxies to Electric
+// Electric uses READ REPLICA for all shape queries
+export async function GET(
+  request: Request,
+  { params }: { params: { table: string } }
+) {
+  const electricUrl = new URL(
+    `${process.env.ELECTRIC_URL}/v1/shape/${params.table}`
+  )
+  
+  // Forward query params
+  const searchParams = new URL(request.url).searchParams
+  searchParams.forEach((value, key) => {
+    electricUrl.searchParams.set(key, value)
+  })
+  
+  // Add auth context for filtering
+  const session = await getServerSession()
+  if (session?.user) {
+    electricUrl.searchParams.set('user_id', session.user.id)
   }
-  sort?: {
-    field: 'name' | 'propertyId' | 'createdAt'
-    order: 'asc' | 'desc'
-  }
-}
-
-// Output
-{
-  properties: Property[]
-  pagination: {
-    total: number
-    page: number
-    limit: number
-    totalPages: number
-  }
+  
+  // Proxy to Electric (which uses read replica)
+  return fetch(electricUrl.toString())
 }
 ```
 
-#### `property.getById`
+### Available Shapes
 ```typescript
-// Input
-{
-  id: string
+// These all use READ REPLICA via Electric
+const shapes = {
+  // User-scoped shapes
+  '/api/sync/properties': 'Properties for current user',
+  '/api/sync/turns': 'Active turns',
+  '/api/sync/vendors': 'Approved vendors',
+  '/api/sync/notifications': 'User notifications',
+  
+  // Reference data (cacheable)
+  '/api/sync/turn-stages': 'Turn stage configuration',
+  '/api/sync/property-types': 'Property type list',
 }
-
-// Output
-Property
 ```
 
-#### `property.create`
+## Write API (Minimal)
+
+All write operations use PRIMARY database:
+
+### Property Writes
+
+#### POST `/api/write/properties`
 ```typescript
-// Input
-{
-  propertyId: string
-  name: string
-  streetAddress: string
-  city?: string
-  state?: string
-  zipCode?: string
-  propertyTypeId: string
-  yearBuilt?: number
-  areaSqft?: number
-  bedrooms?: number
-  bathrooms?: number
-  market?: string
-  isCore?: boolean
-  propertyManagerId?: string
+// Uses PRIMARY database
+interface Request {
+  operation: 'create' | 'update' | 'delete'
+  data: Partial<Property>
+  version?: number // For optimistic locking
 }
 
-// Output
-Property
-```
-
-#### `property.update`
-```typescript
-// Input
-{
-  id: string
-  data: Partial<PropertyUpdateInput>
-}
-
-// Output
-Property
-```
-
-#### `property.delete`
-```typescript
-// Input
-{
-  id: string
-}
-
-// Output
-{
+interface Response {
   success: boolean
-  message: string
-}
-```
-
-#### `property.bulkImport`
-```typescript
-// Input
-{
-  file: File // CSV or Excel
-  mapping: {
-    [csvColumn: string]: string // Database field
-  }
-}
-
-// Output
-{
-  imported: number
-  failed: number
-  errors: ImportError[]
-}
-```
-
-### REST Endpoints
-
-#### GET `/api/properties/export`
-Export properties to CSV/Excel
-```http
-GET /api/properties/export?format=csv&filters[isActive]=true
-```
-
-#### GET `/api/properties/:id/summary`
-Get property summary with statistics
-```typescript
-// Response
-{
-  property: Property
-  statistics: {
-    totalTurns: number
-    activeTurns: number
-    averageTurnDuration: number
-    totalSpent: number
-    upcomingMoveOuts: number
-  }
-  recentActivity: Activity[]
-}
-```
-
-## Turn Management API
-
-### tRPC Procedures
-
-#### `turn.getAll`
-```typescript
-// Input
-{
-  page?: number
-  limit?: number
-  filters?: {
-    propertyId?: string
-    stageId?: string
-    vendorId?: string
-    dateRange?: {
-      start: Date
-      end: Date
-    }
-    approvalStatus?: ApprovalStatus
-    isActive?: boolean
-  }
-}
-
-// Output
-{
-  turns: Turn[]
-  pagination: PaginationInfo
-}
-```
-
-#### `turn.getKanban`
-```typescript
-// Input
-{
-  propertyId?: string
-  vendorId?: string
-}
-
-// Output
-{
-  stages: {
-    id: string
-    name: string
-    turns: Turn[]
-    count: number
-  }[]
-}
-```
-
-#### `turn.create`
-```typescript
-// Input
-{
-  propertyId: string
-  moveOutDate?: Date
-  notes?: string
-  woNumber?: string
-}
-
-// Output
-Turn
-```
-
-#### `turn.updateStage`
-```typescript
-// Input
-{
-  turnId: string
-  stageId: string
-  notes?: string
-}
-
-// Output
-{
-  turn: Turn
-  notifications: Notification[]
-}
-```
-
-#### `turn.approve`
-```typescript
-// Input
-{
-  turnId: string
-  level: 'DFO' | 'HO'
-  amount?: number
-  notes?: string
-}
-
-// Output
-{
-  turn: Turn
-  nextStage: TurnStage
-  notifications: Notification[]
-}
-```
-
-#### `turn.reject`
-```typescript
-// Input
-{
-  turnId: string
-  reason: string
-  level: 'DFO' | 'HO'
-}
-
-// Output
-{
-  turn: Turn
-  notifications: Notification[]
-}
-```
-
-#### `turn.assignVendor`
-```typescript
-// Input
-{
-  turnId: string
-  vendorId: string
-  amount?: number
-  expectedCompletionDate?: Date
-}
-
-// Output
-Turn
-```
-
-#### `turn.uploadDocument`
-```typescript
-// Input
-{
-  turnId: string
-  documentType: DocumentType
-  file: File
-  description?: string
-}
-
-// Output
-{
-  document: Document
-  turn: Turn
-}
-```
-
-### Lock Box Management
-
-#### `turn.updateLockBox`
-```typescript
-// Input
-{
-  turnId: string
-  lockBoxInfo: {
-    installDate: Date
-    location: LockBoxLocation
-    primaryCode: string
-    images?: File[]
-  }
-}
-
-// Output
-{
-  turn: Turn
-  lockBox: LockBox
-}
-```
-
-## Vendor Management API
-
-### tRPC Procedures
-
-#### `vendor.getAll`
-```typescript
-// Input
-{
-  page?: number
-  limit?: number
-  search?: string
-  filters?: {
-    isActive?: boolean
-    isApproved?: boolean
-    minRating?: number
-  }
-}
-
-// Output
-{
-  vendors: Vendor[]
-  pagination: PaginationInfo
-}
-```
-
-#### `vendor.getPerformance`
-```typescript
-// Input
-{
-  vendorId: string
-  dateRange?: {
-    start: Date
-    end: Date
-  }
-}
-
-// Output
-{
-  vendor: Vendor
-  metrics: {
-    totalJobs: number
-    completedJobs: number
-    averageCompletionTime: number
-    averageRating: number
-    totalRevenue: number
-    onTimePercentage: number
-  }
-  recentJobs: Turn[]
-}
-```
-
-## Utility Management API
-
-### tRPC Procedures
-
-#### `utility.getProviders`
-```typescript
-// Input
-{
-  type?: UtilityType
-  isActive?: boolean
-}
-
-// Output
-UtilityProvider[]
-```
-
-#### `utility.createBill`
-```typescript
-// Input
-{
-  propertyUtilityId: string
-  billDate: Date
-  dueDate: Date
-  amount: number
-  usage?: {
-    amount: number
-    unit: string
-  }
-}
-
-// Output
-UtilityBill
-```
-
-#### `utility.recordPayment`
-```typescript
-// Input
-{
-  billId: string
-  amount: number
-  paymentDate: Date
-  paymentMethod: string
-  reference?: string
-}
-
-// Output
-{
-  bill: UtilityBill
-  receipt: PaymentReceipt
-}
-```
-
-## Reporting API
-
-### tRPC Procedures
-
-#### `report.getTurnSummary`
-```typescript
-// Input
-{
-  dateRange: {
-    start: Date
-    end: Date
-  }
-  groupBy?: 'property' | 'vendor' | 'stage'
-  propertyIds?: string[]
-  vendorIds?: string[]
-}
-
-// Output
-{
-  summary: {
-    totalTurns: number
-    completedTurns: number
-    averageDuration: number
-    totalCost: number
-    averageCost: number
-  }
-  breakdown: {
-    label: string
-    value: number
-    count: number
-  }[]
-  trends: {
-    date: Date
-    value: number
-  }[]
-}
-```
-
-#### `report.getVendorReport`
-```typescript
-// Input
-{
-  vendorId?: string
-  dateRange: DateRange
-  metrics: VendorMetric[]
-}
-
-// Output
-{
-  vendors: VendorPerformance[]
-  comparison: {
-    average: number
-    best: number
-    worst: number
-  }
-}
-```
-
-#### `report.generateCustom`
-```typescript
-// Input
-{
-  name: string
-  type: 'table' | 'chart' | 'pivot'
-  dataSource: string
-  columns: string[]
-  filters: Filter[]
-  groupBy?: string[]
-  aggregations?: Aggregation[]
-}
-
-// Output
-{
-  reportId: string
-  data: any[]
-  metadata: ReportMetadata
-}
-```
-
-### Export Endpoints
-
-#### POST `/api/reports/export`
-```typescript
-// Request
-{
-  reportId?: string
-  format: 'pdf' | 'excel' | 'csv'
-  data?: any[]
-  config?: ExportConfig
-}
-
-// Response
-{
-  url: string // Download URL
-  expiresAt: Date
-}
-```
-
-## Notification API
-
-### tRPC Procedures
-
-#### `notification.getUnread`
-```typescript
-// Input
-{
-  limit?: number
-}
-
-// Output
-Notification[]
-```
-
-#### `notification.markAsRead`
-```typescript
-// Input
-{
-  notificationIds: string[]
-}
-
-// Output
-{
-  updated: number
-}
-```
-
-### WebSocket Events
-
-#### Connection
-```typescript
-// Client -> Server
-{
-  type: 'auth',
-  token: string
-}
-
-// Server -> Client
-{
-  type: 'connected',
-  userId: string
-}
-```
-
-#### Real-time Notifications
-```typescript
-// Server -> Client
-{
-  type: 'notification',
-  data: {
-    id: string
-    title: string
+  property?: Property
+  error?: {
+    type: 'CONFLICT' | 'VALIDATION' | 'PERMISSION'
     message: string
-    type: NotificationType
-    entityType?: string
-    entityId?: string
-    actionUrl?: string
+    conflicts?: any
+  }
+}
+
+// Implementation
+export async function POST(req: Request) {
+  const db = getPrimaryDb() // Uses PRIMARY connection
+  
+  // Validate business rules
+  await validatePropertyRules(req.data)
+  
+  // Check version for conflicts
+  if (req.operation === 'update') {
+    const current = await db.select()
+      .from(properties)
+      .where(eq(properties.id, req.data.id))
+    
+    if (current.version !== req.version) {
+      return { error: { type: 'CONFLICT' } }
+    }
+  }
+  
+  // Execute write
+  const result = await db.transaction(async (tx) => {
+    // Write operation
+    // Audit log
+    // Version increment
+  })
+  
+  // Electric will propagate via read replica
+  return { success: true, property: result }
+}
+```
+
+### Turn Writes
+
+#### POST `/api/write/turns`
+```typescript
+// Uses PRIMARY database
+interface TurnWriteRequest {
+  operation: 'create' | 'update' | 'stage-change' | 'approve'
+  turnId?: string
+  data: Partial<Turn>
+  metadata?: {
+    approvalLevel?: 'DFO' | 'HO'
+    rejectReason?: string
+  }
+}
+
+// Complex business logic handled server-side
+async function handleTurnWrite(req: TurnWriteRequest) {
+  const db = getPrimaryDb() // PRIMARY connection
+  
+  switch (req.operation) {
+    case 'stage-change':
+      // Validate stage transition rules
+      // Send notifications
+      // Update in transaction
+      break
+      
+    case 'approve':
+      // Check approval authority
+      // Update approval status
+      // Trigger workflows
+      break
   }
 }
 ```
 
-#### Turn Updates
+### Batch Writes
+
+#### POST `/api/write/batch`
 ```typescript
-// Server -> Client
-{
-  type: 'turn.updated',
-  data: {
-    turnId: string
-    changes: {
-      field: string
-      oldValue: any
-      newValue: any
-    }[]
-    updatedBy: string
-    timestamp: Date
-  }
+// Uses PRIMARY database for atomic operations
+interface BatchWriteRequest {
+  operations: Array<{
+    table: string
+    operation: 'create' | 'update' | 'delete'
+    data: any
+  }>
+}
+
+// Atomic batch processing
+async function processBatch(req: BatchWriteRequest) {
+  const db = getPrimaryDb()
+  
+  return await db.transaction(async (tx) => {
+    const results = []
+    for (const op of req.operations) {
+      // Process each operation
+      results.push(await processOperation(tx, op))
+    }
+    return results
+  })
+}
+```
+
+## Reporting API (Read Replica)
+
+All reporting endpoints use READ REPLICA:
+
+### GET `/api/reports/dashboard`
+```typescript
+// Uses READ REPLICA
+async function getDashboardMetrics() {
+  const db = getReadReplicaDb()
+  
+  // Heavy aggregation queries on read replica
+  const metrics = await db.select({
+    totalProperties: count(properties.id),
+    activeTurns: count(turns.id),
+    avgTurnDuration: avg(turnDuration),
+  }).from(properties)
+  
+  return metrics
+}
+```
+
+### GET `/api/reports/export`
+```typescript
+// Uses READ REPLICA for bulk exports
+interface ExportRequest {
+  type: 'properties' | 'turns' | 'vendors'
+  format: 'csv' | 'excel' | 'pdf'
+  filters?: any
+}
+
+async function generateExport(req: ExportRequest) {
+  const db = getReadReplicaDb()
+  
+  // Large data reads from replica
+  const data = await db.select()
+    .from(getTable(req.type))
+    .where(buildFilters(req.filters))
+  
+  return formatExport(data, req.format)
 }
 ```
 
@@ -690,270 +359,233 @@ Notification[]
 
 ### POST `/api/upload`
 ```typescript
-// Request (multipart/form-data)
-{
+// Uses PRIMARY for metadata, S3 for storage
+interface UploadRequest {
   file: File
-  entityType: 'property' | 'turn' | 'utility'
+  entityType: 'property' | 'turn' | 'vendor'
   entityId: string
-  documentType: DocumentType
-  description?: string
 }
 
-// Response
-{
-  document: {
-    id: string
-    fileName: string
-    fileUrl: string
-    fileSize: number
-    mimeType: string
-    uploadedAt: Date
+async function handleUpload(req: UploadRequest) {
+  // Upload to S3/Cloudinary
+  const fileUrl = await uploadToStorage(req.file)
+  
+  // Save metadata to PRIMARY database
+  const db = getPrimaryDb()
+  await db.insert(documents).values({
+    url: fileUrl,
+    entityType: req.entityType,
+    entityId: req.entityId
+  })
+  
+  return { url: fileUrl }
+}
+```
+
+## WebSocket Events (via Electric)
+
+Electric handles real-time updates using READ REPLICA:
+
+```typescript
+// Client subscribes to shapes
+const stream = new ShapeStream({
+  url: '/api/sync/turns', // Proxies to Electric → Read Replica
+  params: {
+    where: 'is_active = true'
   }
-}
+})
+
+// Real-time updates flow:
+// 1. Write to PRIMARY via API
+// 2. Electric detects via logical replication on READ REPLICA
+// 3. Electric streams to all subscribed clients
+// 4. PGlite updates locally
+// 5. UI updates instantly
 ```
 
-### GET `/api/files/:id`
-Get file metadata and download URL
-```typescript
-// Response
-{
-  document: Document
-  downloadUrl: string
-  expiresAt: Date
-}
-```
+## Service Worker API
 
-## Batch Operations API
+### Background Sync
+```javascript
+// sw.js - Handles offline writes
+self.addEventListener('sync', async (event) => {
+  if (event.tag === 'sync-writes') {
+    event.waitUntil(syncPendingWrites())
+  }
+})
 
-### POST `/api/batch/properties`
-```typescript
-// Request
-{
-  operation: 'update' | 'delete'
-  ids: string[]
-  data?: Partial<Property> // For update
-}
-
-// Response
-{
-  success: number
-  failed: number
-  errors: BatchError[]
-}
-```
-
-### POST `/api/batch/turns/stage`
-```typescript
-// Request
-{
-  turnIds: string[]
-  stageId: string
-  skipValidation?: boolean
-}
-
-// Response
-{
-  updated: Turn[]
-  failed: {
-    turnId: string
-    reason: string
-  }[]
-}
-```
-
-## Search API
-
-### GET `/api/search`
-Global search across entities
-```typescript
-// Request
-GET /api/search?q=searchterm&types=property,turn,vendor&limit=10
-
-// Response
-{
-  results: {
-    type: string
-    id: string
-    title: string
-    description: string
-    url: string
-    score: number
-  }[]
-  total: number
-  took: number // milliseconds
-}
-```
-
-## Webhooks
-
-### Webhook Registration
-```typescript
-POST /api/webhooks
-{
-  url: string
-  events: WebhookEvent[]
-  secret?: string
-  isActive?: boolean
-}
-```
-
-### Webhook Events
-```typescript
-type WebhookEvent =
-  | 'turn.created'
-  | 'turn.stage_changed'
-  | 'turn.approved'
-  | 'turn.rejected'
-  | 'turn.completed'
-  | 'property.created'
-  | 'property.updated'
-  | 'vendor.assigned'
-  | 'document.uploaded'
-```
-
-### Webhook Payload
-```typescript
-{
-  id: string
-  event: WebhookEvent
-  timestamp: Date
-  data: {
-    entity: any
-    changes?: any
-    user?: {
-      id: string
-      email: string
+async function syncPendingWrites() {
+  // Get pending writes from IndexedDB
+  const pending = await getPendingWrites()
+  
+  for (const write of pending) {
+    try {
+      // Attempt write to PRIMARY database
+      await fetch('/api/write/' + write.table, {
+        method: 'POST',
+        body: JSON.stringify(write)
+      })
+      
+      // Mark as synced
+      await markSynced(write.id)
+    } catch (error) {
+      // Retry later
+      await scheduleRetry(write)
     }
   }
-  signature: string // HMAC-SHA256
+}
+```
+
+## Error Handling
+
+### Conflict Resolution
+```typescript
+interface ConflictError {
+  type: 'CONFLICT'
+  localVersion: number
+  serverVersion: number
+  localData: any
+  serverData: any
+  resolution?: 'local' | 'remote' | 'merge'
+}
+
+// Client handles conflicts
+async function resolveConflict(error: ConflictError) {
+  if (error.resolution === 'merge') {
+    // Merge logic
+    const merged = mergeChanges(error.localData, error.serverData)
+    return await retryWrite(merged)
+  }
+  
+  // User resolution UI
+  return await showConflictDialog(error)
 }
 ```
 
 ## Rate Limiting
 
-All API endpoints are rate limited:
+Different limits for different connection types:
 
-- **Authentication**: 5 requests per minute
-- **Read Operations**: 100 requests per minute
-- **Write Operations**: 50 requests per minute
-- **Batch Operations**: 10 requests per minute
-- **File Uploads**: 20 requests per minute
-
-Rate limit headers:
-```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1640995200
-```
-
-## Error Responses
-
-### Standard Error Format
 ```typescript
-{
-  error: {
-    code: string
-    message: string
-    details?: any
-    timestamp: Date
-    path: string
-    requestId: string
+const rateLimits = {
+  // Write operations (PRIMARY)
+  writes: {
+    limit: 100,
+    window: '1m',
+    connection: 'PRIMARY'
+  },
+  
+  // Auth operations (PRIMARY)
+  auth: {
+    limit: 5,
+    window: '1m',
+    connection: 'PRIMARY'
+  },
+  
+  // Shape subscriptions (READ REPLICA via Electric)
+  shapes: {
+    limit: 50,
+    window: '1m',
+    connection: 'READ_REPLICA'
+  },
+  
+  // Reports (READ REPLICA)
+  reports: {
+    limit: 10,
+    window: '5m',
+    connection: 'READ_REPLICA'
+  },
+  
+  // Exports (READ REPLICA)
+  exports: {
+    limit: 5,
+    window: '10m',
+    connection: 'READ_REPLICA'
   }
 }
 ```
 
-### Error Codes
-- `AUTH_REQUIRED`: Authentication required
-- `AUTH_INVALID`: Invalid credentials
-- `AUTH_EXPIRED`: Token expired
-- `PERMISSION_DENIED`: Insufficient permissions
-- `NOT_FOUND`: Resource not found
-- `VALIDATION_ERROR`: Input validation failed
-- `CONFLICT`: Resource conflict
-- `RATE_LIMIT`: Rate limit exceeded
-- `SERVER_ERROR`: Internal server error
+## Connection Configuration
 
-## API Versioning
+### Environment Variables
+```bash
+# Primary database (for writes)
+NEON_DATABASE_URL="postgresql://user:pass@ep-main.us-east-2.aws.neon.tech/turns_db"
+NEON_DATABASE_POOLED_URL="postgresql://user:pass@ep-main-pooler.us-east-2.aws.neon.tech/turns_db"
 
-The API uses URL versioning:
-- Current version: `/api/v1`
-- Legacy support: Minimum 6 months
-- Deprecation notices: Via headers
+# Read replica (for Electric and reports)
+NEON_READ_REPLICA_URL="postgresql://user:pass@ep-replica.us-east-2.aws.neon.tech/turns_db"
 
-```http
-X-API-Version: 1.0
-X-API-Deprecated: true
-X-API-Sunset: 2024-12-31
+# Electric service (uses read replica)
+ELECTRIC_URL="http://electric-service:3000"
+ELECTRIC_DATABASE_URL="${NEON_READ_REPLICA_URL}"
 ```
 
-## SDK Examples
-
-### TypeScript/JavaScript
+### Database Client Setup
 ```typescript
-import { createTRPCClient } from '@trpc/client'
-import type { AppRouter } from './server/routers'
+// src/db/connections.ts
+import { neon } from '@neondatabase/serverless'
+import { drizzle } from 'drizzle-orm/neon-http'
 
-const client = createTRPCClient<AppRouter>({
-  url: 'https://api.turnsmanagement.com/trpc',
-  headers: {
-    authorization: `Bearer ${token}`
-  }
-})
+// Primary connection for writes
+export function getPrimaryDb() {
+  const sql = neon(process.env.NEON_DATABASE_POOLED_URL!)
+  return drizzle(sql, { schema })
+}
 
-// Usage
-const properties = await client.property.getAll.query({
-  page: 1,
-  limit: 20,
-  filters: { isActive: true }
-})
-```
+// Read replica for queries
+export function getReadReplicaDb() {
+  const sql = neon(process.env.NEON_READ_REPLICA_URL!)
+  return drizzle(sql, { schema })
+}
 
-### Python
-```python
-import requests
-
-class TurnsManagementAPI:
-    def __init__(self, base_url, token):
-        self.base_url = base_url
-        self.headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
-    
-    def get_properties(self, **filters):
-        response = requests.get(
-            f'{self.base_url}/api/properties',
-            headers=self.headers,
-            params=filters
-        )
-        return response.json()
-
-# Usage
-api = TurnsManagementAPI('https://api.turnsmanagement.com', token)
-properties = api.get_properties(isActive=True, isCore=True)
-```
-
-## Testing Endpoints
-
-### Health Check
-```http
-GET /api/health
-
-Response:
-{
-  status: 'healthy',
-  timestamp: Date,
-  version: string,
-  services: {
-    database: 'connected',
-    redis: 'connected',
-    storage: 'connected'
-  }
+// Direct connection for migrations (PRIMARY only)
+export function getMigrationDb() {
+  const sql = neon(process.env.NEON_DATABASE_URL!)
+  return drizzle(sql, { schema })
 }
 ```
 
-### API Documentation
-```http
-GET /api/docs
+## Monitoring & Analytics
+
+### Metrics to Track
+```typescript
+interface ApiMetrics {
+  // Write operations (PRIMARY)
+  writesPerMinute: number
+  writeLatency: number
+  conflictRate: number
+  
+  // Shape subscriptions (READ REPLICA)
+  activeShapes: number
+  shapeDataVolume: number
+  
+  // Sync performance
+  syncLatency: number
+  pendingWrites: number
+  
+  // Connection distribution
+  primaryLoad: number
+  replicaLoad: number
+}
 ```
-Interactive API documentation using Swagger/OpenAPI
+
+## Benefits of This Architecture
+
+### Performance
+- 📊 **90% Fewer API Calls**: Most reads from local database
+- ⚡ **Instant UI**: No loading states for synced data
+- 🔄 **Real-time Updates**: Automatic propagation via Electric
+- 📈 **Better Scaling**: Read replica handles all shape subscriptions
+
+### Cost Optimization
+- 💰 **Reduced Primary Load**: Writes only on primary
+- 📉 **Lower Compute**: Read replica handles heavy queries
+- 🔋 **Efficient Sync**: Delta updates only
+- 🌐 **CDN-like Performance**: Local reads eliminate latency
+
+### Developer Experience
+- 🎯 **Simpler Code**: No loading states or manual cache
+- 🔧 **Type Safety**: End-to-end TypeScript
+- 🐛 **Easier Debugging**: Inspect local database
+- 📦 **Smaller Bundle**: Less state management code

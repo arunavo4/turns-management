@@ -1,479 +1,503 @@
-# Turns Management Web Application - Comprehensive Project Plan
+# Turns Management - Local-First Project Plan
 
 ## Executive Summary
 
-This document outlines the complete plan for migrating the Odoo-based Turns Management ERP to a modern, standalone web application using Next.js, Tailwind CSS v4, shadcn/ui, and PostgreSQL.
+Complete migration plan from Odoo ERP to a modern **local-first web application** using Electric SQL sync, Neon Postgres, and PGlite. This architecture delivers native-app performance with zero loading states and full offline capabilities.
 
 ## Project Goals
 
-1. **Modernize the User Experience**: Create an intuitive, responsive interface
-2. **Improve Performance**: Faster load times and real-time updates
-3. **Enhance Scalability**: Cloud-native architecture
-4. **Simplify Maintenance**: Clean codebase with modern tooling
-5. **Mobile-First Design**: Full functionality on all devices
+### Primary Objectives
+1. **Instant Performance**: Sub-millisecond response times via local database
+2. **Offline-First**: Full functionality without internet connection
+3. **Real-Time Sync**: Automatic propagation across all clients
+4. **Cost Reduction**: 90% fewer API calls, reduced server load
+5. **Developer Velocity**: Simplified state management with local database
 
-## Current System Analysis
+### Success Metrics
+- **Performance**: < 50ms UI response time (currently 200-500ms)
+- **Availability**: 100% offline functionality (currently 0%)
+- **Sync Latency**: < 1 second for updates (currently 3-5 seconds)
+- **API Reduction**: 90% fewer API calls
+- **Cost Savings**: 50% reduction in infrastructure costs
 
-### Existing Odoo Modules
-1. **Property Management** (`property/`)
-   - Master data for all properties
-   - Property details and status tracking
-   - Document management
+## Architecture Migration
 
-2. **Turns Management** (`turns_management/`)
-   - Complete turn workflow from draft to completion
-   - Multi-stage approval process
-   - Vendor management
-   - Lock box tracking
-
-3. **Utility Management** (`utility_management/`, `property_utility_bill/`)
-   - Utility provider tracking
-   - Bill management and payments
-   - Schedule management
-
-4. **Move Out Scheduling** (`move_out_prt_schedule/`)
-   - Move out date tracking
-   - Inspection scheduling
-   - Property status updates
-
-5. **Reporting** (`turns_report/`)
-   - Turn reports
-   - Vendor performance reports
-   - Financial summaries
-
-## Workflow Mappings
-
-### 1. Property Lifecycle Workflow
+### From Traditional to Local-First
 
 ```mermaid
-graph LR
-    A[New Property] --> B[Active Property]
-    B --> C[Move Out Scheduled]
-    C --> D[Turn Process]
-    D --> E[Rent Ready]
-    E --> F[Move In Scheduled]
-    F --> B
+graph TB
+    subgraph "Current Architecture (Odoo)"
+        O1[Browser] -->|Every Read| O2[API Server]
+        O2 -->|Query| O3[PostgreSQL]
+        O3 -->|Response| O2
+        O2 -->|JSON| O1
+    end
+    
+    subgraph "New Local-First Architecture"
+        N1[Browser + PGlite] -->|Instant Read| N1
+        N1 -->|Background Sync| N2[Electric SQL]
+        N2 -->|Replication| N3[Neon Postgres]
+        N3 -->|Changes| N2
+        N2 -->|Stream| N1
+    end
 ```
 
-### 2. Turn Management Workflow
+## Implementation Phases
 
-```mermaid
-graph TD
-    A[Draft] --> B[On Hold]
-    B --> C[Lock Box Install]
-    C --> D[Pre Move Out]
-    D --> E[Move Out Inspection]
-    E --> F[Scope Creation]
-    F --> G{DFO Approval}
-    G -->|Approved| H[HO Approval]
-    G -->|Rejected| F
-    H -->|Approved| I[Vendor Assignment]
-    H -->|Rejected| F
-    I --> J[Turn In Progress]
-    J --> K[Change Order?]
-    K -->|Yes| L[Change Order Approval]
-    K -->|No| M[Turn Complete]
-    L --> M
-    M --> N[Final Inspection]
-    N --> O[360 Scan]
-    O --> P[Sent to Leasing]
-```
+### Phase 1: Infrastructure Foundation (Weeks 1-2)
 
-### 3. Approval Workflow
-
-```mermaid
-graph LR
-    A[Scope Created] --> B{DFO Review}
-    B -->|Approve| C{HO Review}
-    B -->|Reject| D[Revision Required]
-    C -->|Approve| E[Vendor Assignment]
-    C -->|Reject| D
-    D --> A
-```
-
-## UI/UX Improvements
-
-### 1. Dashboard Redesign
-
-**Current Issues:**
-- Cluttered interface
-- Poor information hierarchy
-- Limited customization
-
-**Improvements:**
-```typescript
-interface DashboardFeatures {
-  // Customizable widgets
-  widgets: [
-    'PropertyOverview',
-    'ActiveTurns',
-    'PendingApprovals',
-    'VendorPerformance',
-    'FinancialSummary'
-  ],
+#### Week 1: Core Setup
+- [ ] **Neon Database Setup**
+  - Create primary database
+  - Configure read replica
+  - Set up logical replication
+  - Create development branches
   
-  // Real-time updates
-  realtime: {
-    notifications: true,
-    statusUpdates: true,
-    approvalAlerts: true
-  },
-  
-  // Quick actions
-  quickActions: [
-    'CreateTurn',
-    'ScheduleInspection',
-    'ApproveScope',
-    'AssignVendor'
-  ]
-}
-```
+- [ ] **Electric SQL Deployment**
+  - Deploy Electric service (Fly.io)
+  - Configure shapes and permissions
+  - Set up monitoring
+  - Test replication pipeline
 
-### 2. Property Management Interface
+- [ ] **Development Environment**
+  - Docker compose for local dev
+  - PGlite integration in Next.js
+  - Drizzle ORM dual schemas
+  - TypeScript configuration
 
-**Enhanced Features:**
-- **Smart Search**: Full-text search with filters
-- **Bulk Operations**: Multi-select actions
-- **Interactive Map View**: Visualize property locations
-- **Quick Edit Mode**: Inline editing
-- **Document Preview**: Built-in viewer
+#### Week 2: Authentication & Base UI
+- [ ] **Better-Auth Setup**
+  - User authentication flows
+  - Session management
+  - Role-based permissions
+  - Shape authorization
 
-### 3. Turn Management Board
+- [ ] **Base Application Shell**
+  - Next.js app structure
+  - Tailwind CSS v4 setup
+  - shadcn/ui components
+  - Layout components
 
-**Kanban Board Improvements:**
-```typescript
-interface KanbanFeatures {
-  // Drag-and-drop with validation
-  dragDrop: {
-    enabled: true,
-    validation: true,
-    confirmationRequired: true
-  },
-  
-  // Card customization
-  cardDisplay: {
-    priority: 'color-coded',
-    daysInStage: true,
-    vendor: true,
-    amount: true,
-    progressBar: true
-  },
-  
-  // Filtering
-  filters: {
-    property: true,
-    vendor: true,
-    dateRange: true,
-    amount: true,
-    status: true
+### Phase 2: Local-First Data Layer (Weeks 3-4)
+
+#### Week 3: Sync Infrastructure
+- [ ] **Shape Definitions**
+  ```typescript
+  // Core shapes for initial sync
+  const shapes = {
+    properties: { table: 'properties', where: 'manager_id = $1' },
+    activeTurns: { table: 'turns', where: 'is_active = true' },
+    vendors: { table: 'vendors', where: 'is_approved = true' },
+    turnStages: { table: 'turn_stages' }
   }
-}
-```
+  ```
 
-### 4. Mobile Experience
+- [ ] **Sync Manager**
+  - Shape subscription management
+  - Offline detection
+  - Sync status tracking
+  - Error recovery
 
-**Mobile-Optimized Features:**
-- Touch-friendly controls
-- Swipe gestures for navigation
-- Offline mode support
-- Camera integration for photos
-- Push notifications
+- [ ] **Write Queue**
+  - Optimistic updates
+  - Background sync
+  - Conflict detection
+  - Retry logic
 
-### 5. Reporting Dashboard
+#### Week 4: Data Migration
+- [ ] **Odoo Data Export**
+  - Properties and metadata
+  - Turn history
+  - User accounts
+  - Document references
 
-**Interactive Reports:**
-- Drill-down capabilities
-- Export to multiple formats
-- Scheduled reports
-- Custom report builder
-- Real-time data visualization
+- [ ] **Data Transformation**
+  - Schema mapping
+  - Data validation
+  - Relationship preservation
+  - Audit trail creation
 
-## Implementation Roadmap
+- [ ] **Import to Neon**
+  - Batch import scripts
+  - Data verification
+  - Index optimization
+  - Initial shape generation
 
-### Phase 1: Foundation (Weeks 1-4)
-
-#### Week 1-2: Project Setup
-- [ ] Initialize Next.js project with TypeScript
-- [ ] Configure Tailwind CSS v4
-- [ ] Set up shadcn/ui components
-- [ ] Configure PostgreSQL with Prisma
-- [ ] Implement Better-Auth
-
-#### Week 3-4: Core Infrastructure
-- [ ] Database schema implementation
-- [ ] API structure (tRPC setup)
-- [ ] Authentication flows
-- [ ] Role-based access control
-- [ ] File upload system
-
-### Phase 2: Core Modules (Weeks 5-12)
+### Phase 3: Core Features (Weeks 5-8)
 
 #### Week 5-6: Property Management
-- [ ] Property CRUD operations
-- [ ] Property listing with filters
-- [ ] Property detail views
-- [ ] Document management
-- [ ] Import/Export functionality
+- [ ] **Local Property Operations**
+  ```typescript
+  // All reads from local PGlite
+  const properties = await db.select()
+    .from(properties)
+    .where(eq(properties.isActive, true))
+  // Instant results, no loading state needed
+  ```
 
-#### Week 7-8: Turn Management Core
-- [ ] Turn creation workflow
-- [ ] Stage management system
-- [ ] Kanban board interface
-- [ ] Basic approval workflow
-- [ ] Email notifications
+- [ ] **Property CRUD**
+  - Create with optimistic updates
+  - Edit with conflict resolution
+  - Bulk operations
+  - Document attachments
 
-#### Week 9-10: Vendor & User Management
-- [ ] Vendor registration
-- [ ] Vendor assignment
-- [ ] User management
-- [ ] Permission system
-- [ ] Activity logging
+- [ ] **Search & Filtering**
+  - Full-text search locally
+  - Advanced filters
+  - Saved searches
+  - Export functionality
 
-#### Week 11-12: Utilities & Scheduling
-- [ ] Utility provider management
-- [ ] Bill tracking
-- [ ] Move out scheduling
-- [ ] Calendar integration
-- [ ] Reminder system
+#### Week 7-8: Turn Management
+- [ ] **Kanban Board**
+  - Drag-drop with local state
+  - Stage transitions
+  - Real-time updates via Electric
+  - Offline queue for changes
 
-### Phase 3: Advanced Features (Weeks 13-18)
+- [ ] **Turn Workflow**
+  ```typescript
+  // Optimistic stage change
+  await updateTurn(turnId, { 
+    stageId: newStageId,
+    _synced: false 
+  })
+  // UI updates instantly
+  // Sync happens in background
+  ```
 
-#### Week 13-14: Approval Workflows
-- [ ] Multi-level approvals
-- [ ] Rejection handling
-- [ ] Approval history
-- [ ] Notification system
-- [ ] Delegation features
+- [ ] **Approval System**
+  - DFO/HO approval flows
+  - Notification system
+  - Audit logging
+  - Email integration
 
-#### Week 15-16: Reporting & Analytics
-- [ ] Dashboard widgets
-- [ ] Standard reports
-- [ ] Custom report builder
-- [ ] Export functionality
-- [ ] Data visualization
+### Phase 4: Advanced Features (Weeks 9-12)
 
-#### Week 17-18: Document Management
-- [ ] File upload/download
-- [ ] Document categorization
-- [ ] Version control
-- [ ] Preview functionality
-- [ ] Cloud storage integration
+#### Week 9: Vendor Management
+- [ ] **Vendor Directory**
+  - Local vendor database
+  - Performance metrics
+  - Assignment workflow
+  - Rating system
 
-### Phase 4: Enhancement & Optimization (Weeks 19-22)
+- [ ] **Vendor Portal**
+  - Limited shape access
+  - Work order visibility
+  - Document upload
+  - Status updates
 
-#### Week 19-20: Performance & Testing
-- [ ] Performance optimization
-- [ ] Load testing
-- [ ] Security audit
-- [ ] Bug fixes
-- [ ] Code refactoring
+#### Week 10: Reporting & Analytics
+- [ ] **Local Analytics**
+  ```typescript
+  // Complex queries run locally
+  const metrics = await db.select({
+    avgTurnTime: avg(turnDuration),
+    totalCost: sum(turnAmount),
+    vendorPerformance: ...
+  }).from(turns)
+  // Instant results from PGlite
+  ```
 
-#### Week 21-22: Mobile & PWA
-- [ ] Progressive Web App setup
-- [ ] Offline functionality
-- [ ] Push notifications
-- [ ] Mobile testing
-- [ ] App store deployment prep
+- [ ] **Dashboard Widgets**
+  - Real-time metrics
+  - Trend analysis
+  - Custom reports
+  - Export to PDF/Excel
 
-### Phase 5: Migration & Deployment (Weeks 23-26)
+#### Week 11: Offline Capabilities
+- [ ] **Service Worker**
+  - App shell caching
+  - Background sync
+  - Push notifications
+  - Update prompts
 
-#### Week 23-24: Data Migration
-- [ ] Data extraction from Odoo
-- [ ] Data transformation scripts
-- [ ] Migration testing
-- [ ] Data validation
-- [ ] Rollback procedures
+- [ ] **Conflict Resolution**
+  - Automatic merging
+  - User resolution UI
+  - Conflict history
+  - Rollback capability
 
-#### Week 25-26: Deployment & Training
-- [ ] Production deployment
-- [ ] User training materials
-- [ ] Documentation
-- [ ] Support setup
-- [ ] Go-live preparation
+#### Week 12: Mobile Optimization
+- [ ] **Progressive Web App**
+  - Install prompts
+  - App icons
+  - Splash screens
+  - Native features
+
+- [ ] **Mobile UI**
+  - Touch-optimized
+  - Gesture support
+  - Responsive layouts
+  - Performance tuning
+
+### Phase 5: Production Readiness (Weeks 13-14)
+
+#### Week 13: Testing & QA
+- [ ] **Test Coverage**
+  - Unit tests (> 80%)
+  - Integration tests
+  - E2E tests
+  - Sync tests
+
+- [ ] **Performance Testing**
+  - Load testing with K6
+  - Sync performance
+  - Offline scenarios
+  - Memory profiling
+
+#### Week 14: Deployment
+- [ ] **Production Setup**
+  - Neon production database
+  - Electric on Fly.io
+  - Vercel deployment
+  - Monitoring setup
+
+- [ ] **Migration**
+  - User training
+  - Data verification
+  - Gradual rollout
+  - Fallback plan
 
 ## Technical Implementation Details
 
-### Component Structure
+### Local-First Patterns
 
+#### 1. Optimistic Updates
 ```typescript
-// Project structure
-src/
-├── app/                      # Next.js app directory
-│   ├── (auth)/              # Authentication pages
-│   ├── (dashboard)/         # Main application
-│   │   ├── properties/
-│   │   ├── turns/
-│   │   ├── vendors/
-│   │   ├── reports/
-│   │   └── settings/
-│   └── api/                 # API routes
-├── components/
-│   ├── ui/                  # shadcn/ui components
-│   ├── features/            # Feature-specific components
-│   └── layouts/             # Layout components
-├── lib/
-│   ├── auth/               # Authentication utilities
-│   ├── db/                 # Database utilities
-│   └── utils/              # Helper functions
-├── hooks/                   # Custom React hooks
-├── services/               # Business logic
-└── types/                  # TypeScript types
+// Update locally first
+async function updateProperty(id: string, data: any) {
+  // 1. Update PGlite immediately
+  await localDb.update(properties)
+    .set({ ...data, _synced: false })
+    .where(eq(properties.id, id))
+  
+  // 2. UI reflects change instantly
+  revalidate()
+  
+  // 3. Queue for server sync
+  await queueWrite({ table: 'properties', id, data })
+}
 ```
 
-### Key Features Implementation
-
-#### 1. Real-time Updates
+#### 2. Shape Subscriptions
 ```typescript
-// Using Server-Sent Events for real-time updates
-interface RealtimeConfig {
-  channels: {
-    turns: '/api/sse/turns',
-    approvals: '/api/sse/approvals',
-    notifications: '/api/sse/notifications'
-  },
-  reconnect: {
-    enabled: true,
-    interval: 5000,
-    maxAttempts: 10
+// Subscribe to user-relevant data
+async function initUserShapes(userId: string) {
+  const shapes = [
+    // Properties managed by user
+    electric.sync({
+      table: 'properties',
+      where: `manager_id = '${userId}'`
+    }),
+    
+    // Active turns for those properties
+    electric.sync({
+      table: 'turns',
+      where: 'property_id IN (SELECT id FROM properties WHERE manager_id = $1)',
+      params: [userId]
+    })
+  ]
+  
+  await Promise.all(shapes)
+}
+```
+
+#### 3. Conflict Resolution
+```typescript
+// Handle write conflicts
+async function resolveConflict(local: any, server: any) {
+  // Last-write-wins by default
+  if (server.version > local.version) {
+    return server
   }
-}
-```
-
-#### 2. Advanced Search
-```typescript
-// Full-text search implementation
-interface SearchConfig {
-  indexes: ['properties', 'turns', 'vendors'],
-  features: {
-    fuzzySearch: true,
-    filters: true,
-    sorting: true,
-    pagination: true
-  },
-  caching: {
-    enabled: true,
-    ttl: 300 // 5 minutes
+  
+  // Field-level merge for text
+  if (local.type === 'text') {
+    return mergeText(local, server)
   }
+  
+  // User resolution for critical data
+  return await showConflictUI(local, server)
 }
 ```
 
-#### 3. Workflow Engine
+### Performance Optimizations
+
+#### 1. Shape Design
 ```typescript
-// Configurable workflow system
-interface WorkflowEngine {
-  stages: Stage[],
-  transitions: Transition[],
-  validations: Validation[],
-  actions: {
-    onEnter: Action[],
-    onExit: Action[],
-    onApprove: Action[],
-    onReject: Action[]
-  }
+// Minimize shape size
+const efficientShape = {
+  table: 'properties',
+  columns: ['id', 'name', 'address', 'status'], // Only needed columns
+  where: 'is_active = true AND updated_at > $1',
+  params: [thirtyDaysAgo],
+  limit: 1000 // Paginate large datasets
 }
 ```
 
-## Quality Assurance Plan
-
-### Testing Strategy
-
-1. **Unit Testing**
-   - Jest for component testing
-   - 80% code coverage target
-   - Automated test runs
-
-2. **Integration Testing**
-   - API endpoint testing
-   - Database transaction testing
-   - Authentication flow testing
-
-3. **E2E Testing**
-   - Playwright for browser testing
-   - Critical user journey coverage
-   - Cross-browser compatibility
-
-4. **Performance Testing**
-   - Load testing with k6
-   - Response time monitoring
-   - Database query optimization
-
-### Code Quality
-
-```json
-{
-  "linting": "ESLint with strict rules",
-  "formatting": "Prettier with consistent config",
-  "typeChecking": "TypeScript strict mode",
-  "codeReview": "PR reviews required",
-  "documentation": "JSDoc for all public APIs"
+#### 2. Lazy Loading
+```typescript
+// Load shapes on demand
+const shapeLoader = {
+  core: ['properties', 'activeTurns'], // Load immediately
+  secondary: ['vendors', 'turnStages'], // Load after core
+  onDemand: ['auditLogs', 'documents'] // Load when needed
 }
 ```
 
-## Risk Management
+#### 3. Index Strategy
+```sql
+-- Client-side indexes for common queries
+CREATE INDEX idx_properties_search ON properties(name, address);
+CREATE INDEX idx_turns_active ON turns(is_active, stage_id);
+CREATE INDEX idx_sync_pending ON properties(_synced) WHERE _synced = false;
+```
 
-### Identified Risks
+## Risk Mitigation
 
-1. **Data Migration Complexity**
-   - Mitigation: Phased migration with validation
-   - Contingency: Maintain Odoo parallel run
+### Technical Risks
 
-2. **User Adoption**
-   - Mitigation: Comprehensive training program
-   - Contingency: Gradual rollout
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| **Sync Conflicts** | Data inconsistency | Versioning + audit trail |
+| **Large Dataset** | Performance issues | Shape pagination + filtering |
+| **Offline Duration** | Stale data | TTL + forced refresh |
+| **Browser Storage** | Quota exceeded | Data pruning + compression |
 
-3. **Performance Issues**
-   - Mitigation: Load testing and optimization
-   - Contingency: Scaling infrastructure
+### Business Risks
 
-4. **Integration Challenges**
-   - Mitigation: API-first design
-   - Contingency: Custom adapters
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| **User Adoption** | Low usage | Training + gradual rollout |
+| **Data Migration** | Data loss | Backup + verification |
+| **Vendor Resistance** | Integration issues | Portal + support |
+| **Regulatory** | Compliance | Audit logs + encryption |
 
-## Success Metrics
+## Success Criteria
 
-### KPIs
+### Phase 1 Success (Week 2)
+- ✅ Neon database operational with read replica
+- ✅ Electric SQL streaming changes
+- ✅ PGlite storing data locally
+- ✅ Basic auth working
 
-1. **Performance Metrics**
-   - Page load time < 2 seconds
-   - API response time < 200ms
-   - 99.9% uptime
+### Phase 2 Success (Week 4)
+- ✅ Shapes syncing to browser
+- ✅ Offline writes queued
+- ✅ Data migrated from Odoo
+- ✅ Sync status visible
 
-2. **User Metrics**
-   - User adoption rate > 90%
-   - Task completion time reduced by 40%
-   - User satisfaction score > 4.5/5
+### Phase 3 Success (Week 8)
+- ✅ Properties fully functional offline
+- ✅ Turns workflow complete
+- ✅ Real-time updates working
+- ✅ < 100ms response times
 
-3. **Business Metrics**
-   - Turn processing time reduced by 30%
-   - Approval cycle time reduced by 50%
-   - Document processing automated by 80%
+### Phase 4 Success (Week 12)
+- ✅ All features working offline
+- ✅ PWA installable
+- ✅ Conflict resolution tested
+- ✅ Mobile optimized
 
-## Budget Estimation
+### Phase 5 Success (Week 14)
+- ✅ 90% test coverage
+- ✅ Production deployed
+- ✅ Users trained
+- ✅ Odoo decommissioned
 
-### Development Costs
-- Frontend Development: 400 hours
-- Backend Development: 300 hours
-- Database Design: 100 hours
-- Testing & QA: 150 hours
-- Project Management: 100 hours
-- **Total: 1050 hours**
+## Budget & Resources
 
 ### Infrastructure Costs (Monthly)
-- Hosting (Vercel Pro): $20
-- Database (Supabase): $25
-- File Storage (AWS S3): $50
-- Email Service: $20
-- Monitoring: $30
-- **Total: $145/month**
+```typescript
+const monthlyCosts = {
+  neon: {
+    primary: 100,      // 1 CPU
+    replica: 100,      // 1 CPU
+    storage: 50,       // 100GB
+    branches: 20       // Dev branches
+  },
+  electric: {
+    fly_io: 50,        // 2 instances
+    bandwidth: 30      // Shape streaming
+  },
+  vercel: {
+    hosting: 20,       // Pro plan
+    functions: 10      // API routes
+  },
+  total: 380,          // Per month
+  annual: 4560,        // Per year
+  savings: '60% less than current Odoo hosting'
+}
+```
+
+### Development Team
+- **Lead Developer**: Full-stack, Electric SQL experience
+- **Frontend Dev**: React, local-first patterns
+- **DevOps**: Neon, Fly.io deployment
+- **QA Engineer**: Sync testing, offline scenarios
+- **Project Manager**: Stakeholder coordination
+
+## Training Plan
+
+### User Training Modules
+1. **Introduction to Local-First** (1 hour)
+   - No more loading spinners
+   - Offline capabilities
+   - Real-time collaboration
+
+2. **New Features** (2 hours)
+   - Property management
+   - Turn workflow
+   - Reporting
+
+3. **Troubleshooting** (1 hour)
+   - Sync issues
+   - Conflict resolution
+   - Support channels
+
+### Developer Documentation
+- Architecture overview
+- Local-first patterns
+- Sync debugging
+- Deployment guide
+
+## Monitoring & Maintenance
+
+### Key Metrics
+```typescript
+const monitoring = {
+  performance: {
+    syncLatency: '< 1s',
+    queryTime: '< 50ms',
+    conflictRate: '< 1%'
+  },
+  availability: {
+    uptime: '99.9%',
+    offlineCapability: '100%',
+    syncReliability: '99.5%'
+  },
+  usage: {
+    activeUsers: 'daily',
+    syncVolume: 'hourly',
+    errorRate: 'real-time'
+  }
+}
+```
+
+### Maintenance Schedule
+- **Daily**: Monitor sync performance
+- **Weekly**: Review error logs
+- **Monthly**: Database optimization
+- **Quarterly**: Security updates
 
 ## Conclusion
 
-This comprehensive plan provides a clear roadmap for migrating from the Odoo-based system to a modern web application. The phased approach ensures minimal disruption while delivering significant improvements in user experience, performance, and maintainability.
+This local-first architecture represents a paradigm shift from traditional web applications. By moving the database into the browser with Electric SQL and PGlite, we achieve:
 
-## Next Steps
+1. **Instant Performance**: No network latency for reads
+2. **True Offline**: Full functionality without internet
+3. **Reduced Costs**: Minimal API calls and server load
+4. **Better UX**: No loading states or stale data
+5. **Simplified Development**: Database as the source of truth
 
-1. Review and approve the plan
-2. Set up development environment
-3. Begin Phase 1 implementation
-4. Establish weekly progress reviews
-5. Prepare user communication plan
+The 14-week timeline balances rapid delivery with thorough testing, ensuring a smooth migration from Odoo to the new platform.

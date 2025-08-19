@@ -1,794 +1,905 @@
-# Turns Management - Database Schema Design
+# Turns Management - Neon Postgres Database Schema
 
 ## Overview
-PostgreSQL database schema for the Turns Management application using Prisma ORM.
+Serverless PostgreSQL database schema for the Turns Management application using Neon, designed for Electric SQL synchronization with logical replication and optimized for local-first architecture.
 
-## Core Tables
+## Neon Configuration
+
+### Database Setup
+```sql
+-- Neon automatically handles these, but verify they're enabled:
+-- Logical replication (required for Electric)
+SHOW wal_level; -- Should be 'logical'
+
+-- Connection pooling (built into Neon)
+-- Autoscaling (automatic in Neon)
+-- Branching (via Neon CLI/Console)
+```
+
+### Connection Strings
+```bash
+# Direct connection (for migrations)
+DATABASE_URL="postgresql://user:pass@ep-cool-name-123456.us-east-2.aws.neon.tech/turns_db?sslmode=require"
+
+# Pooled connection (for application)
+DATABASE_POOLED_URL="postgresql://user:pass@ep-cool-name-123456-pooler.us-east-2.aws.neon.tech/turns_db?sslmode=require"
+
+# Electric replication URL (with replication role)
+ELECTRIC_DATABASE_URL="postgresql://electric_user:pass@ep-cool-name-123456.us-east-2.aws.neon.tech/turns_db?sslmode=require"
+```
+
+### Neon Branching Strategy
+```bash
+# Create development branch
+neon branches create --name dev --parent main
+
+# Create feature branch
+neon branches create --name feature/turn-workflow --parent dev
+
+# Create test data branch
+neon branches create --name test-data --parent main --with-data
+```
+
+## Electric SQL Requirements
+
+### 1. Replication User Setup
+```sql
+-- Create user for Electric replication
+CREATE USER electric_replication WITH REPLICATION PASSWORD 'secure_password';
+
+-- Grant necessary permissions
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO electric_replication;
+GRANT USAGE ON SCHEMA public TO electric_replication;
+
+-- Grant permissions on future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+GRANT SELECT ON TABLES TO electric_replication;
+```
+
+### 2. Publication for Electric
+```sql
+-- Create publication for Electric to subscribe to
+CREATE PUBLICATION electric_publication FOR ALL TABLES;
+
+-- Or selective publication for specific tables
+CREATE PUBLICATION electric_publication FOR TABLE 
+  users, properties, turns, turn_stages, vendors, 
+  utility_providers, notifications;
+```
+
+## Core Schema Design
+
+### Base Table Pattern
+All tables follow this pattern for Electric compatibility:
+
+```sql
+-- Every table includes these columns
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+version INTEGER NOT NULL DEFAULT 1, -- For optimistic locking
+created_by UUID REFERENCES users(id),
+updated_by UUID REFERENCES users(id)
+```
 
 ### 1. Users & Authentication
 
 ```sql
--- Users table
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255),
-    first_name VARCHAR(100),
-    last_name VARCHAR(100),
-    phone VARCHAR(20),
-    role user_role NOT NULL DEFAULT 'USER',
-    is_active BOOLEAN DEFAULT true,
-    email_verified BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP,
-    CONSTRAINT valid_email CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$')
-);
-
 -- User roles enum
 CREATE TYPE user_role AS ENUM (
-    'SUPER_ADMIN',
-    'ADMIN',
-    'PROPERTY_MANAGER',
-    'SR_PROPERTY_MANAGER',
-    'VENDOR',
-    'INSPECTOR',
-    'DFO_APPROVER',
-    'HO_APPROVER',
-    'USER'
+  'SUPER_ADMIN',
+  'ADMIN',
+  'PROPERTY_MANAGER',
+  'SR_PROPERTY_MANAGER',
+  'VENDOR',
+  'INSPECTOR',
+  'DFO_APPROVER',
+  'HO_APPROVER',
+  'USER'
 );
 
--- Sessions table for auth
-CREATE TABLE sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token VARCHAR(255) UNIQUE NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Users table
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255),
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  phone VARCHAR(20),
+  role user_role NOT NULL DEFAULT 'USER',
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  email_verified BOOLEAN NOT NULL DEFAULT false,
+  last_login TIMESTAMPTZ,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  created_by UUID REFERENCES users(id),
+  updated_by UUID REFERENCES users(id),
+  CONSTRAINT valid_email CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$')
 );
+
+-- Indexes for performance
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_is_active ON users(is_active);
+
+-- Sessions for auth
+CREATE TABLE sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token VARCHAR(255) UNIQUE NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX idx_sessions_token ON sessions(token);
+CREATE INDEX idx_sessions_expires ON sessions(expires_at);
 ```
 
 ### 2. Properties
 
 ```sql
--- Property types
-CREATE TABLE property_types (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Properties table
 CREATE TABLE properties (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    property_id VARCHAR(50) UNIQUE NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    property_type_id UUID REFERENCES property_types(id),
-    
-    -- Address fields
-    street_address VARCHAR(255) NOT NULL,
-    city VARCHAR(100),
-    state VARCHAR(50),
-    zip_code VARCHAR(20),
-    country VARCHAR(100) DEFAULT 'United States',
-    county VARCHAR(100),
-    
-    -- Property details
-    year_built INTEGER,
-    market VARCHAR(100),
-    area_sqft INTEGER,
-    bedrooms DECIMAL(3,1),
-    bathrooms DECIMAL(3,1),
-    
-    -- Status fields
-    is_active BOOLEAN DEFAULT true,
-    is_section_8 BOOLEAN DEFAULT false,
-    in_disposition BOOLEAN DEFAULT false,
-    has_insurance BOOLEAN DEFAULT false,
-    has_squatters BOOLEAN DEFAULT false,
-    is_core BOOLEAN DEFAULT true,
-    ownership_status BOOLEAN DEFAULT false,
-    
-    -- Assignments
-    property_manager_id UUID REFERENCES users(id),
-    sr_property_manager_id UUID REFERENCES users(id),
-    
-    -- Dates
-    move_in_date DATE,
-    move_out_date DATE,
-    
-    -- Metadata
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
-    
-    INDEX idx_property_id (property_id),
-    INDEX idx_is_active (is_active),
-    INDEX idx_is_core (is_core)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  property_id VARCHAR(50) UNIQUE NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  
+  -- Address
+  street_address VARCHAR(255) NOT NULL,
+  city VARCHAR(100),
+  state VARCHAR(50),
+  zip_code VARCHAR(20),
+  country VARCHAR(100) DEFAULT 'United States',
+  county VARCHAR(100),
+  
+  -- Details
+  year_built INTEGER,
+  market VARCHAR(100),
+  area_sqft INTEGER,
+  bedrooms DECIMAL(3,1),
+  bathrooms DECIMAL(3,1),
+  
+  -- Status flags (optimized for filtering)
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  is_section_8 BOOLEAN NOT NULL DEFAULT false,
+  in_disposition BOOLEAN NOT NULL DEFAULT false,
+  has_insurance BOOLEAN NOT NULL DEFAULT false,
+  has_squatters BOOLEAN NOT NULL DEFAULT false,
+  is_core BOOLEAN NOT NULL DEFAULT true,
+  ownership_status BOOLEAN NOT NULL DEFAULT false,
+  
+  -- Assignments
+  property_manager_id UUID REFERENCES users(id),
+  sr_property_manager_id UUID REFERENCES users(id),
+  
+  -- Important dates
+  move_in_date DATE,
+  move_out_date DATE,
+  
+  -- Metadata
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  created_by UUID REFERENCES users(id),
+  updated_by UUID REFERENCES users(id)
 );
+
+-- Indexes for Electric shapes and queries
+CREATE INDEX idx_properties_property_id ON properties(property_id);
+CREATE INDEX idx_properties_is_active ON properties(is_active);
+CREATE INDEX idx_properties_is_core ON properties(is_core);
+CREATE INDEX idx_properties_manager ON properties(property_manager_id, is_active);
+CREATE INDEX idx_properties_sr_manager ON properties(sr_property_manager_id, is_active);
+-- Composite index for shape filtering
+CREATE INDEX idx_properties_shape_filter ON properties(property_manager_id, sr_property_manager_id, is_active);
 ```
 
-### 3. Turns Management
+### 3. Turn Management
 
 ```sql
 -- Turn stages configuration
 CREATE TABLE turn_stages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    display_order INTEGER NOT NULL,
-    color VARCHAR(7) DEFAULT '#000000',
-    
-    -- Email settings
-    send_email_to_users BOOLEAN DEFAULT false,
-    send_email_to_vendor BOOLEAN DEFAULT false,
-    
-    -- Requirements
-    is_amount_required BOOLEAN DEFAULT false,
-    is_vendor_required BOOLEAN DEFAULT false,
-    requires_approval BOOLEAN DEFAULT false,
-    
-    -- Status
-    is_complete_stage BOOLEAN DEFAULT false,
-    is_active BOOLEAN DEFAULT true,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    UNIQUE(display_order)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(100) NOT NULL,
+  display_order INTEGER UNIQUE NOT NULL,
+  color VARCHAR(7) DEFAULT '#000000',
+  
+  -- Email settings
+  send_email_to_users BOOLEAN NOT NULL DEFAULT false,
+  send_email_to_vendor BOOLEAN NOT NULL DEFAULT false,
+  
+  -- Requirements
+  is_amount_required BOOLEAN NOT NULL DEFAULT false,
+  is_vendor_required BOOLEAN NOT NULL DEFAULT false,
+  requires_approval BOOLEAN NOT NULL DEFAULT false,
+  
+  -- Status
+  is_complete_stage BOOLEAN NOT NULL DEFAULT false,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
--- Main turns table
-CREATE TABLE turns (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    turn_id VARCHAR(50) UNIQUE NOT NULL,
-    property_id UUID NOT NULL REFERENCES properties(id),
-    stage_id UUID NOT NULL REFERENCES turn_stages(id),
-    
-    -- Work order details
-    wo_number VARCHAR(50),
-    move_out_date DATE,
-    trash_out_needed BOOLEAN DEFAULT false,
-    
-    -- Financial
-    turn_amount DECIMAL(10,2),
-    approved_turn_amount DECIMAL(10,2),
-    change_order_amount DECIMAL(10,2),
-    total_turn_amount DECIMAL(10,2) GENERATED ALWAYS AS 
-        (COALESCE(turn_amount, 0) + COALESCE(change_order_amount, 0)) STORED,
-    
-    -- Vendors and assignments
-    vendor_id UUID REFERENCES vendors(id),
-    turns_superintendent_id UUID REFERENCES users(id),
-    flooring_vendor_id UUID REFERENCES vendors(id),
-    
-    -- Important dates
-    expected_completion_date DATE,
-    occupancy_check_date DATE,
-    scope_approved_date DATE,
-    turn_assignment_date DATE,
-    final_walk_date DATE,
-    sent_to_leasing_date DATE,
-    scan_360_date DATE,
-    turn_completion_date DATE,
-    
-    -- Utilities status
-    power_status utility_status,
-    water_status utility_status,
-    gas_status utility_status,
-    
-    -- Approval workflow
-    scope_approval_status approval_status,
-    dfo_approval_user_id UUID REFERENCES users(id),
-    dfo_approval_datetime TIMESTAMP,
-    ho_approval_user_id UUID REFERENCES users(id),
-    ho_approval_datetime TIMESTAMP,
-    reject_user_id UUID REFERENCES users(id),
-    reject_datetime TIMESTAMP,
-    reject_reason TEXT,
-    
-    -- Features
-    order_inside_maps BOOLEAN DEFAULT false,
-    generate_wo_email BOOLEAN DEFAULT false,
-    appliances_needed BOOLEAN DEFAULT false,
-    appliances_ordered BOOLEAN DEFAULT false,
-    
-    -- Links
-    scope_photos_link VARCHAR(500),
-    
-    -- Status
-    status VARCHAR(100),
-    sub_status VARCHAR(100),
-    is_active BOOLEAN DEFAULT true,
-    
-    -- Metadata
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
-    
-    INDEX idx_turn_id (turn_id),
-    INDEX idx_property_id (property_id),
-    INDEX idx_stage_id (stage_id),
-    INDEX idx_vendor_id (vendor_id),
-    INDEX idx_is_active (is_active)
-);
+CREATE INDEX idx_turn_stages_order ON turn_stages(display_order);
+CREATE INDEX idx_turn_stages_active ON turn_stages(is_active);
 
 -- Approval status enum
 CREATE TYPE approval_status AS ENUM (
-    'DFO_APPROVAL_NEEDED',
-    'DFO_APPROVED',
-    'HO_APPROVAL_NEEDED',
-    'HO_APPROVED',
-    'REJECTED'
+  'PENDING',
+  'DFO_APPROVAL_NEEDED',
+  'DFO_APPROVED', 
+  'HO_APPROVAL_NEEDED',
+  'HO_APPROVED',
+  'REJECTED'
 );
 
 -- Utility status enum
-CREATE TYPE utility_status AS ENUM ('YES', 'NO');
+CREATE TYPE utility_status AS ENUM ('YES', 'NO', 'PENDING');
+
+-- Turns table
+CREATE TABLE turns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  turn_id VARCHAR(50) UNIQUE NOT NULL,
+  property_id UUID NOT NULL REFERENCES properties(id),
+  stage_id UUID NOT NULL REFERENCES turn_stages(id),
+  
+  -- Work order
+  wo_number VARCHAR(50),
+  move_out_date DATE,
+  trash_out_needed BOOLEAN NOT NULL DEFAULT false,
+  
+  -- Financial
+  turn_amount DECIMAL(10,2),
+  approved_turn_amount DECIMAL(10,2),
+  change_order_amount DECIMAL(10,2),
+  
+  -- Vendor assignment
+  vendor_id UUID REFERENCES vendors(id),
+  turns_superintendent_id UUID REFERENCES users(id),
+  flooring_vendor_id UUID REFERENCES vendors(id),
+  
+  -- Important dates
+  expected_completion_date DATE,
+  occupancy_check_date DATE,
+  scope_approved_date DATE,
+  turn_assignment_date DATE,
+  final_walk_date DATE,
+  sent_to_leasing_date DATE,
+  scan_360_date DATE,
+  turn_completion_date DATE,
+  
+  -- Utilities
+  power_status utility_status DEFAULT 'PENDING',
+  water_status utility_status DEFAULT 'PENDING',
+  gas_status utility_status DEFAULT 'PENDING',
+  
+  -- Approval workflow
+  scope_approval_status approval_status DEFAULT 'PENDING',
+  dfo_approval_user_id UUID REFERENCES users(id),
+  dfo_approval_datetime TIMESTAMPTZ,
+  ho_approval_user_id UUID REFERENCES users(id),
+  ho_approval_datetime TIMESTAMPTZ,
+  reject_user_id UUID REFERENCES users(id),
+  reject_datetime TIMESTAMPTZ,
+  reject_reason VARCHAR(500),
+  
+  -- Features
+  order_inside_maps BOOLEAN NOT NULL DEFAULT false,
+  generate_wo_email BOOLEAN NOT NULL DEFAULT false,
+  appliances_needed BOOLEAN NOT NULL DEFAULT false,
+  appliances_ordered BOOLEAN NOT NULL DEFAULT false,
+  
+  -- Links
+  scope_photos_link VARCHAR(500),
+  
+  -- Status
+  status VARCHAR(100),
+  sub_status VARCHAR(100),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  
+  -- Lock box
+  lock_box_install_date DATE,
+  lock_box_location VARCHAR(255),
+  primary_lock_box_code VARCHAR(50),
+  
+  -- Metadata
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  created_by UUID REFERENCES users(id),
+  updated_by UUID REFERENCES users(id)
+);
+
+-- Indexes for Electric shapes and performance
+CREATE INDEX idx_turns_turn_id ON turns(turn_id);
+CREATE INDEX idx_turns_property_id ON turns(property_id);
+CREATE INDEX idx_turns_stage_id ON turns(stage_id);
+CREATE INDEX idx_turns_vendor_id ON turns(vendor_id);
+CREATE INDEX idx_turns_is_active ON turns(is_active);
+CREATE INDEX idx_turns_approval_status ON turns(scope_approval_status);
+-- Composite index for active turns shape
+CREATE INDEX idx_turns_active_shape ON turns(is_active, stage_id) WHERE is_active = true;
 ```
 
-### 4. Lock Box Management
-
-```sql
--- Lock box information
-CREATE TABLE lock_boxes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    turn_id UUID NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
-    
-    install_date DATE NOT NULL,
-    location lock_box_location NOT NULL,
-    primary_code VARCHAR(20) NOT NULL,
-    previous_codes TEXT[],
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    changed_by UUID REFERENCES users(id),
-    
-    INDEX idx_turn_id (turn_id)
-);
-
--- Lock box location enum
-CREATE TYPE lock_box_location AS ENUM (
-    'FRONT_SIDE',
-    'BACK_SIDE',
-    'LEFT_SIDE',
-    'RIGHT_SIDE',
-    'OTHER'
-);
-
--- Lock box history
-CREATE TABLE lock_box_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    lock_box_id UUID NOT NULL REFERENCES lock_boxes(id),
-    old_code VARCHAR(20),
-    new_code VARCHAR(20),
-    change_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    changed_by UUID NOT NULL REFERENCES users(id)
-);
-```
-
-### 5. Documents & Attachments
-
-```sql
--- Document types
-CREATE TYPE document_type AS ENUM (
-    'APPROVED_SCOPE',
-    'SCOPE_PHOTOS',
-    'CHANGE_ORDER',
-    'CHANGE_ORDER_PHOTOS',
-    '360_SCAN',
-    'LOCK_BOX_IMAGE',
-    'PROPERTY_IMAGE',
-    'UTILITY_BILL',
-    'OTHER'
-);
-
--- Documents table
-CREATE TABLE documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
-    -- Polymorphic association
-    entity_type VARCHAR(50) NOT NULL, -- 'property', 'turn', 'utility_bill'
-    entity_id UUID NOT NULL,
-    
-    document_type document_type NOT NULL,
-    file_name VARCHAR(255) NOT NULL,
-    file_url VARCHAR(500) NOT NULL,
-    file_size INTEGER,
-    mime_type VARCHAR(100),
-    
-    uploaded_by UUID REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_entity (entity_type, entity_id),
-    INDEX idx_document_type (document_type)
-);
-```
-
-### 6. Vendors
+### 4. Vendors
 
 ```sql
 -- Vendors table
 CREATE TABLE vendors (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    company_name VARCHAR(255) NOT NULL,
-    contact_name VARCHAR(255),
-    email VARCHAR(255),
-    phone VARCHAR(20),
-    
-    -- Address
-    street_address VARCHAR(255),
-    city VARCHAR(100),
-    state VARCHAR(50),
-    zip_code VARCHAR(20),
-    
-    -- Business details
-    tax_id VARCHAR(50),
-    license_number VARCHAR(100),
-    insurance_expiry DATE,
-    
-    -- Status
-    is_active BOOLEAN DEFAULT true,
-    is_approved BOOLEAN DEFAULT false,
-    
-    -- Ratings
-    average_rating DECIMAL(3,2),
-    total_jobs INTEGER DEFAULT 0,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_is_active (is_active),
-    INDEX idx_company_name (company_name)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_name VARCHAR(255) NOT NULL,
+  contact_name VARCHAR(255),
+  email VARCHAR(255),
+  phone VARCHAR(20),
+  
+  -- Address
+  street_address VARCHAR(255),
+  city VARCHAR(100),
+  state VARCHAR(50),
+  zip_code VARCHAR(20),
+  
+  -- Business details
+  tax_id VARCHAR(50),
+  license_number VARCHAR(100),
+  insurance_expiry DATE,
+  
+  -- Status
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  is_approved BOOLEAN NOT NULL DEFAULT false,
+  
+  -- Ratings
+  average_rating DECIMAL(3,2),
+  total_jobs INTEGER NOT NULL DEFAULT 0,
+  
+  -- Metadata
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  created_by UUID REFERENCES users(id),
+  updated_by UUID REFERENCES users(id)
 );
+
+-- Indexes for vendor shapes
+CREATE INDEX idx_vendors_is_active ON vendors(is_active);
+CREATE INDEX idx_vendors_is_approved ON vendors(is_approved);
+CREATE INDEX idx_vendors_active_approved ON vendors(is_active, is_approved) 
+  WHERE is_active = true AND is_approved = true;
+CREATE INDEX idx_vendors_company_name ON vendors(company_name);
 ```
 
-### 7. Utilities Management
+### 5. Audit Logging
 
 ```sql
--- Utility providers
-CREATE TABLE utility_providers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
-    type utility_type NOT NULL,
-    code VARCHAR(20) UNIQUE,
-    
-    contact_phone VARCHAR(20),
-    contact_email VARCHAR(255),
-    website VARCHAR(255),
-    
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Utility types enum
-CREATE TYPE utility_type AS ENUM (
-    'WATER',
-    'POWER',
-    'GAS',
-    'SEWER',
-    'TRASH',
-    'INTERNET'
-);
-
--- Property utilities
-CREATE TABLE property_utilities (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    property_id UUID NOT NULL REFERENCES properties(id),
-    utility_type utility_type NOT NULL,
-    provider_id UUID REFERENCES utility_providers(id),
-    
-    account_number VARCHAR(100),
-    is_with_resident BOOLEAN DEFAULT false,
-    deposit_amount DECIMAL(10,2),
-    
-    -- System flags
-    has_well_water BOOLEAN DEFAULT false,
-    has_septic_tank BOOLEAN DEFAULT false,
-    
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    UNIQUE(property_id, utility_type),
-    INDEX idx_property_id (property_id)
-);
-
--- Utility bills
-CREATE TABLE utility_bills (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    property_utility_id UUID NOT NULL REFERENCES property_utilities(id),
-    
-    bill_date DATE NOT NULL,
-    due_date DATE,
-    amount DECIMAL(10,2) NOT NULL,
-    
-    -- Usage details
-    usage_amount DECIMAL(10,2),
-    usage_unit VARCHAR(20),
-    
-    -- Payment
-    is_paid BOOLEAN DEFAULT false,
-    paid_date DATE,
-    paid_amount DECIMAL(10,2),
-    payment_method VARCHAR(50),
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_property_utility_id (property_utility_id),
-    INDEX idx_bill_date (bill_date),
-    INDEX idx_is_paid (is_paid)
-);
-```
-
-### 8. Move Out Schedules
-
-```sql
--- Move out schedules
-CREATE TABLE move_out_schedules (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    schedule_id VARCHAR(50) UNIQUE NOT NULL,
-    property_id UUID NOT NULL REFERENCES properties(id),
-    
-    resident_name VARCHAR(255),
-    move_out_date DATE NOT NULL,
-    
-    -- Inspection details
-    inspection_date DATE,
-    inspection_time TIME,
-    inspector_id UUID REFERENCES users(id),
-    
-    -- Status
-    status move_out_status DEFAULT 'SCHEDULED',
-    
-    notes TEXT,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by UUID REFERENCES users(id),
-    
-    INDEX idx_property_id (property_id),
-    INDEX idx_move_out_date (move_out_date),
-    INDEX idx_status (status)
-);
-
--- Move out status enum
-CREATE TYPE move_out_status AS ENUM (
-    'SCHEDULED',
-    'IN_PROGRESS',
-    'COMPLETED',
-    'CANCELLED'
-);
-```
-
-### 9. Audit & History
-
-```sql
--- Audit log for tracking changes
-CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
-    -- What was changed
-    table_name VARCHAR(100) NOT NULL,
-    record_id UUID NOT NULL,
-    action audit_action NOT NULL,
-    
-    -- Change details
-    old_values JSONB,
-    new_values JSONB,
-    changed_fields TEXT[],
-    
-    -- Who and when
-    user_id UUID REFERENCES users(id),
-    ip_address INET,
-    user_agent TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_table_record (table_name, record_id),
-    INDEX idx_user_id (user_id),
-    INDEX idx_created_at (created_at)
-);
-
 -- Audit action enum
-CREATE TYPE audit_action AS ENUM ('INSERT', 'UPDATE', 'DELETE');
+CREATE TYPE audit_action AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'VIEW', 'EXPORT');
 
--- Turn stage history
-CREATE TABLE turn_stage_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    turn_id UUID NOT NULL REFERENCES turns(id),
-    
-    from_stage_id UUID REFERENCES turn_stages(id),
-    to_stage_id UUID NOT NULL REFERENCES turn_stages(id),
-    
-    duration_minutes INTEGER,
-    changed_by UUID REFERENCES users(id),
-    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_turn_id (turn_id),
-    INDEX idx_changed_at (changed_at)
+-- Audit logs table
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- What was changed
+  table_name VARCHAR(100) NOT NULL,
+  record_id UUID NOT NULL,
+  action audit_action NOT NULL,
+  
+  -- Who made the change
+  user_id UUID NOT NULL REFERENCES users(id),
+  user_email VARCHAR(255) NOT NULL,
+  user_name VARCHAR(255) NOT NULL,
+  user_role VARCHAR(50) NOT NULL,
+  
+  -- Where and how
+  ip_address INET,
+  user_agent TEXT,
+  session_id UUID,
+  
+  -- Change details
+  old_values JSONB,
+  new_values JSONB,
+  changed_fields TEXT[],
+  
+  -- Context
+  property_id UUID,
+  turn_id UUID,
+  vendor_id UUID,
+  context VARCHAR(255),
+  
+  -- Metadata
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
+
+-- Indexes for audit queries
+CREATE INDEX idx_audit_table_record ON audit_logs(table_name, record_id);
+CREATE INDEX idx_audit_user_id ON audit_logs(user_id);
+CREATE INDEX idx_audit_created_at ON audit_logs(created_at DESC);
+CREATE INDEX idx_audit_property_id ON audit_logs(property_id);
+CREATE INDEX idx_audit_turn_id ON audit_logs(turn_id);
+CREATE INDEX idx_audit_action ON audit_logs(action);
 ```
 
-### 10. Notifications & Communications
+## Automatic Timestamps
 
 ```sql
--- Email templates
-CREATE TABLE email_templates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL UNIQUE,
-    subject VARCHAR(255) NOT NULL,
-    body TEXT NOT NULL,
-    variables TEXT[], -- List of available variables
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Email logs
-CREATE TABLE email_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
-    -- Recipients
-    to_email VARCHAR(255) NOT NULL,
-    cc_emails TEXT[],
-    bcc_emails TEXT[],
-    
-    -- Content
-    subject VARCHAR(255) NOT NULL,
-    body TEXT,
-    template_id UUID REFERENCES email_templates(id),
-    
-    -- Context
-    entity_type VARCHAR(50),
-    entity_id UUID,
-    
-    -- Status
-    status email_status DEFAULT 'PENDING',
-    sent_at TIMESTAMP,
-    error_message TEXT,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_to_email (to_email),
-    INDEX idx_status (status),
-    INDEX idx_entity (entity_type, entity_id)
-);
-
--- Email status enum
-CREATE TYPE email_status AS ENUM (
-    'PENDING',
-    'SENT',
-    'FAILED',
-    'BOUNCED'
-);
-
--- In-app notifications
-CREATE TABLE notifications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id),
-    
-    title VARCHAR(255) NOT NULL,
-    message TEXT NOT NULL,
-    type notification_type DEFAULT 'INFO',
-    
-    -- Link to related entity
-    entity_type VARCHAR(50),
-    entity_id UUID,
-    action_url VARCHAR(500),
-    
-    is_read BOOLEAN DEFAULT false,
-    read_at TIMESTAMP,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    INDEX idx_user_id (user_id),
-    INDEX idx_is_read (is_read),
-    INDEX idx_created_at (created_at)
-);
-
--- Notification type enum
-CREATE TYPE notification_type AS ENUM (
-    'INFO',
-    'SUCCESS',
-    'WARNING',
-    'ERROR',
-    'APPROVAL_REQUIRED'
-);
-```
-
-## Indexes Strategy
-
-```sql
--- Performance indexes
-CREATE INDEX idx_properties_search ON properties 
-    USING gin(to_tsvector('english', name || ' ' || street_address || ' ' || city));
-
-CREATE INDEX idx_turns_date_range ON turns(move_out_date, expected_completion_date)
-    WHERE is_active = true;
-
-CREATE INDEX idx_turns_pending_approval ON turns(scope_approval_status)
-    WHERE scope_approval_status IN ('DFO_APPROVAL_NEEDED', 'HO_APPROVAL_NEEDED');
-
--- Composite indexes for common queries
-CREATE INDEX idx_turns_property_stage ON turns(property_id, stage_id)
-    WHERE is_active = true;
-
-CREATE INDEX idx_documents_recent ON documents(created_at DESC);
-```
-
-## Database Functions & Triggers
-
-```sql
--- Auto-update updated_at timestamp
+-- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
+  NEW.updated_at = NOW();
+  NEW.version = OLD.version + 1; -- Increment version for optimistic locking
+  RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
--- Apply trigger to all tables with updated_at
+-- Apply trigger to all tables
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_properties_updated_at BEFORE UPDATE ON properties
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_turns_updated_at BEFORE UPDATE ON turns
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Function to calculate turn duration
-CREATE OR REPLACE FUNCTION calculate_turn_duration(turn_id UUID)
-RETURNS INTEGER AS $$
-DECLARE
-    duration INTEGER;
-BEGIN
-    SELECT EXTRACT(DAY FROM (turn_completion_date - move_out_date))
-    INTO duration
-    FROM turns
-    WHERE id = turn_id;
-    
-    RETURN duration;
-END;
-$$ LANGUAGE plpgsql;
+CREATE TRIGGER update_vendors_updated_at BEFORE UPDATE ON vendors
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Function to get next turn ID
-CREATE OR REPLACE FUNCTION generate_turn_id()
-RETURNS VARCHAR AS $$
-DECLARE
-    next_id VARCHAR;
-BEGIN
-    SELECT 'TURN' || LPAD(COALESCE(MAX(CAST(SUBSTRING(turn_id FROM 5) AS INTEGER)), 0) + 1::text, 5, '0')
-    INTO next_id
-    FROM turns;
-    
-    RETURN next_id;
-END;
-$$ LANGUAGE plpgsql;
+CREATE TRIGGER update_turn_stages_updated_at BEFORE UPDATE ON turn_stages
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 ```
 
-## Prisma Schema Example
+## Row-Level Security (RLS)
 
-```prisma
-// prisma/schema.prisma
-generator client {
-  provider = "prisma-client-js"
-}
+```sql
+-- Enable RLS on sensitive tables
+ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
+ALTER TABLE turns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+-- Property access policy
+CREATE POLICY property_access ON properties
+  FOR ALL
+  USING (
+    property_manager_id = current_setting('app.current_user_id')::UUID
+    OR sr_property_manager_id = current_setting('app.current_user_id')::UUID
+    OR EXISTS (
+      SELECT 1 FROM users 
+      WHERE id = current_setting('app.current_user_id')::UUID 
+      AND role IN ('SUPER_ADMIN', 'ADMIN')
+    )
+  );
 
-model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  passwordHash  String?
-  firstName     String?
-  lastName      String?
-  role          UserRole  @default(USER)
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  // Relations
-  sessions      Session[]
-  properties    Property[] @relation("PropertyManager")
-  turns         Turn[]
-  auditLogs     AuditLog[]
-}
+-- Turn access policy
+CREATE POLICY turn_access ON turns
+  FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM properties p
+      WHERE p.id = turns.property_id
+      AND (
+        p.property_manager_id = current_setting('app.current_user_id')::UUID
+        OR p.sr_property_manager_id = current_setting('app.current_user_id')::UUID
+      )
+    )
+    OR EXISTS (
+      SELECT 1 FROM users 
+      WHERE id = current_setting('app.current_user_id')::UUID 
+      AND role IN ('SUPER_ADMIN', 'ADMIN', 'DFO_APPROVER', 'HO_APPROVER')
+    )
+  );
 
-model Property {
-  id            String    @id @default(uuid())
-  propertyId    String    @unique
-  name          String
-  streetAddress String
-  city          String?
-  state         String?
-  zipCode       String?
-  
-  // Details
-  yearBuilt     Int?
-  areaSqft      Int?
-  bedrooms      Float?
-  bathrooms     Float?
-  
-  // Status
-  isActive      Boolean   @default(true)
-  isCore        Boolean   @default(true)
-  
-  // Relations
-  propertyManager   User?     @relation("PropertyManager", fields: [propertyManagerId], references: [id])
-  propertyManagerId String?
-  turns             Turn[]
-  documents         Document[]
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  @@index([propertyId])
-  @@index([isActive])
-}
+-- Audit logs read-only policy
+CREATE POLICY audit_logs_read ON audit_logs
+  FOR SELECT
+  USING (
+    user_id = current_setting('app.current_user_id')::UUID
+    OR EXISTS (
+      SELECT 1 FROM users 
+      WHERE id = current_setting('app.current_user_id')::UUID 
+      AND role IN ('SUPER_ADMIN', 'ADMIN')
+    )
+  );
+```
 
-model Turn {
-  id            String    @id @default(uuid())
-  turnId        String    @unique
-  
-  property      Property  @relation(fields: [propertyId], references: [id])
-  propertyId    String
-  
-  stage         TurnStage @relation(fields: [stageId], references: [id])
-  stageId       String
-  
-  // Amounts
-  turnAmount    Decimal?  @db.Decimal(10, 2)
-  changeOrderAmount Decimal? @db.Decimal(10, 2)
-  
-  // Dates
-  moveOutDate   DateTime?
-  expectedCompletionDate DateTime?
-  completionDate DateTime?
-  
-  // Status
-  isActive      Boolean   @default(true)
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  @@index([turnId])
-  @@index([propertyId])
-  @@index([stageId])
-}
+## Performance Optimizations
 
-enum UserRole {
-  SUPER_ADMIN
-  ADMIN
-  PROPERTY_MANAGER
-  SR_PROPERTY_MANAGER
-  VENDOR
-  USER
-}
+### 1. Partial Indexes for Common Queries
+```sql
+-- Active properties by manager
+CREATE INDEX idx_properties_active_manager ON properties(property_manager_id) 
+  WHERE is_active = true;
+
+-- Active turns needing approval
+CREATE INDEX idx_turns_pending_approval ON turns(scope_approval_status, stage_id) 
+  WHERE is_active = true AND scope_approval_status IN ('DFO_APPROVAL_NEEDED', 'HO_APPROVAL_NEEDED');
+
+-- Recent audit logs
+CREATE INDEX idx_audit_recent ON audit_logs(created_at DESC) 
+  WHERE created_at > NOW() - INTERVAL '30 days';
+```
+
+### 2. Materialized Views for Reports
+```sql
+-- Property summary view
+CREATE MATERIALIZED VIEW property_summary AS
+SELECT 
+  p.id,
+  p.property_id,
+  p.name,
+  COUNT(DISTINCT t.id) as total_turns,
+  COUNT(DISTINCT t.id) FILTER (WHERE t.is_active = true) as active_turns,
+  AVG(t.turn_amount) as avg_turn_cost,
+  MAX(t.created_at) as last_turn_date
+FROM properties p
+LEFT JOIN turns t ON p.id = t.property_id
+GROUP BY p.id, p.property_id, p.name;
+
+CREATE UNIQUE INDEX ON property_summary(id);
+CREATE INDEX ON property_summary(property_id);
+
+-- Refresh strategy
+REFRESH MATERIALIZED VIEW CONCURRENTLY property_summary;
+```
+
+## Neon-Specific Features
+
+### 1. Branching for Development
+```sql
+-- Each branch gets its own schema version
+-- Neon handles this automatically via branch creation
+
+-- Test migrations on branch before merging
+-- Branch: feature/new-vendor-fields
+ALTER TABLE vendors ADD COLUMN service_area JSONB;
+ALTER TABLE vendors ADD COLUMN specialties TEXT[];
+```
+
+### 2. Point-in-Time Recovery
+```sql
+-- Neon provides automatic PITR
+-- Can restore to any point within retention period
+-- No manual backup configuration needed
+```
+
+### 3. Connection Pooling
+```sql
+-- Use pooled connection string for application
+-- Direct connection only for migrations
+-- Neon handles PgBouncer automatically
+```
+
+## Electric Shape Optimization
+
+### 1. Shape-Specific Indexes
+```sql
+-- Optimize for common Electric shape filters
+CREATE INDEX idx_shape_properties ON properties(property_manager_id, sr_property_manager_id, is_active, created_at DESC);
+CREATE INDEX idx_shape_turns ON turns(is_active, stage_id, created_at DESC);
+CREATE INDEX idx_shape_vendors ON vendors(is_active, is_approved) WHERE is_active = true;
+```
+
+### 2. Column Selection Optimization
+```sql
+-- Create covering indexes for frequently accessed columns
+CREATE INDEX idx_properties_covering ON properties(id, property_id, name, is_active) 
+  INCLUDE (street_address, city, state);
+```
+
+## Monitoring & Maintenance
+
+### 1. Query Performance
+```sql
+-- Monitor slow queries
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+-- View slow queries
+SELECT 
+  query,
+  calls,
+  mean_exec_time,
+  total_exec_time
+FROM pg_stat_statements
+WHERE mean_exec_time > 100 -- queries taking > 100ms
+ORDER BY mean_exec_time DESC;
+```
+
+### 2. Table Sizes
+```sql
+-- Monitor table growth
+SELECT 
+  schemaname,
+  tablename,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+```
+
+### 3. Index Usage
+```sql
+-- Find unused indexes
+SELECT 
+  schemaname,
+  tablename,
+  indexname,
+  idx_scan
+FROM pg_stat_user_indexes
+WHERE idx_scan = 0
+AND indexname NOT LIKE '%_pkey';
 ```
 
 ## Migration Strategy
 
-1. **Data Export from Odoo**
-   - Export all tables to CSV/JSON
-   - Document data transformations needed
-   - Map Odoo fields to new schema
+### 1. Initial Setup
+```bash
+# Create production database
+neon databases create --name turns_production
 
-2. **Data Transformation**
-   - Clean and normalize data
-   - Generate UUIDs for all records
-   - Convert date formats
-   - Validate foreign key relationships
+# Run migrations
+npm run db:migrate:deploy
 
-3. **Data Import**
-   - Use Prisma migrations for schema
-   - Bulk insert with transactions
-   - Verify data integrity
-   - Create indexes after import
+# Verify Electric replication
+psql $DATABASE_URL -c "SELECT * FROM pg_replication_slots;"
+```
 
-4. **Validation**
-   - Row count verification
-   - Relationship integrity checks
-   - Business logic validation
-   - Performance testing
+### 2. Development Workflow
+```bash
+# Create feature branch
+neon branches create --name feature/xyz
+
+# Test migrations
+npm run db:migrate:dev
+
+# Merge when ready
+neon branches merge feature/xyz --into main
+```
+
+### 3. Data Seeding
+```sql
+-- Seed reference data that rarely changes
+INSERT INTO turn_stages (name, display_order, is_active) VALUES
+  ('Draft', 1, true),
+  ('Scope Approval', 2, true),
+  ('In Progress', 3, true),
+  ('Final Walk', 4, true),
+  ('Complete', 5, true);
+
+-- Seed test data on branch only
+-- Use Neon branching to maintain clean production data
+```
+
+## Neon Read Replica Configuration
+
+### Overview
+Neon read replicas provide horizontal scaling for read-heavy workloads. Electric SQL and reporting services use read replicas to minimize load on the primary database.
+
+### Setting Up Read Replicas
+
+#### 1. Create Read Replica
+```bash
+# Via Neon CLI
+neon compute-endpoints create \
+  --project-id <project-id> \
+  --type read_replica \
+  --region us-east-2
+
+# Or via Neon Console
+# Project Settings → Read Replicas → Create
+```
+
+#### 2. Connection URLs
+```bash
+# Primary endpoint (writes)
+PRIMARY_URL="postgresql://user:pass@ep-main-123456.us-east-2.aws.neon.tech/turns_db"
+PRIMARY_POOLED="postgresql://user:pass@ep-main-123456-pooler.us-east-2.aws.neon.tech/turns_db"
+
+# Read replica endpoint (reads)
+REPLICA_URL="postgresql://user:pass@ep-replica-123456.us-east-2.aws.neon.tech/turns_db"
+REPLICA_POOLED="postgresql://user:pass@ep-replica-123456-pooler.us-east-2.aws.neon.tech/turns_db"
+```
+
+### Service Allocation
+
+#### Services Using Read Replica ✅
+
+| Service | Purpose | Load | Connection Type |
+|---------|---------|------|-----------------|
+| **Electric SQL** | Shape subscriptions, logical replication | HIGH | Direct (non-pooled) |
+| **Reporting** | Analytics, dashboards, aggregations | MEDIUM | Pooled |
+| **Exports** | CSV/Excel/PDF generation | LOW | Pooled |
+| **Audit Viewer** | Historical log queries | LOW | Pooled |
+| **Search** | Full-text search, filtering | MEDIUM | Pooled |
+
+#### Services Using Primary ❌
+
+| Service | Purpose | Reason | Connection Type |
+|---------|---------|--------|-----------------|
+| **Authentication** | Login, sessions | Writes required | Pooled |
+| **Write API** | All mutations | INSERT/UPDATE/DELETE | Pooled |
+| **Migrations** | Schema changes | DDL operations | Direct |
+| **Transactions** | Multi-table ops | Consistency required | Pooled |
+| **Sequences** | ID generation | Write operations | Pooled |
+
+### Electric SQL Configuration
+
+```yaml
+# docker-compose.yml
+services:
+  electric:
+    image: electricsql/electric:latest
+    environment:
+      # Use read replica for Electric
+      DATABASE_URL: ${NEON_READ_REPLICA_URL}
+      ELECTRIC_WRITE_TO_PG_MODE: "disabled"
+      LOGICAL_PUBLISHER_HOST: ${NEON_REPLICA_HOST}
+      ELECTRIC_ENABLE_REPLICA_MONITORING: "true"
+```
+
+### Application Configuration
+
+```typescript
+// src/db/config.ts
+export const dbConfig = {
+  // Primary for writes
+  primary: {
+    url: process.env.NEON_DATABASE_POOLED_URL,
+    max_connections: 20,
+    usage: ['auth', 'writes', 'transactions']
+  },
+  
+  // Read replica for reads
+  replica: {
+    url: process.env.NEON_READ_REPLICA_URL,
+    max_connections: 50, // Can handle more connections
+    usage: ['electric', 'reports', 'exports', 'search']
+  },
+  
+  // Direct connection for migrations
+  migration: {
+    url: process.env.NEON_DATABASE_URL,
+    max_connections: 1,
+    usage: ['migrations']
+  }
+}
+
+// Connection router
+export function getConnection(operation: string) {
+  if (operation.startsWith('write')) return dbConfig.primary
+  if (operation.startsWith('read')) return dbConfig.replica
+  if (operation === 'migrate') return dbConfig.migration
+  return dbConfig.primary // Default to primary for safety
+}
+```
+
+### Monitoring Read Replica Performance
+
+```sql
+-- Check replica lag
+SELECT 
+  slot_name,
+  active,
+  pg_size_pretty(pg_current_wal_lsn() - confirmed_flush_lsn) as lag_size,
+  EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp())) as lag_seconds
+FROM pg_replication_slots 
+WHERE slot_type = 'logical';
+
+-- Monitor connection distribution
+SELECT 
+  datname,
+  usename,
+  application_name,
+  client_addr,
+  state,
+  COUNT(*) as connection_count
+FROM pg_stat_activity
+GROUP BY datname, usename, application_name, client_addr, state
+ORDER BY connection_count DESC;
+
+-- Query performance by endpoint
+SELECT 
+  CASE 
+    WHEN client_addr = 'replica_ip' THEN 'Read Replica'
+    ELSE 'Primary'
+  END as endpoint,
+  COUNT(*) as query_count,
+  AVG(mean_exec_time) as avg_time_ms
+FROM pg_stat_statements
+GROUP BY endpoint;
+```
+
+### Load Balancing Strategy
+
+```typescript
+// src/db/load-balancer.ts
+class DatabaseLoadBalancer {
+  private replicaHealth = true
+  private primaryLoad = 0
+  private replicaLoad = 0
+  
+  async getReadConnection() {
+    // Check replica health
+    if (!this.replicaHealth) {
+      console.warn('Read replica unhealthy, falling back to primary')
+      return getPrimaryDb()
+    }
+    
+    // Use replica for reads
+    return getReplicaDb()
+  }
+  
+  async monitorHealth() {
+    try {
+      // Check replica lag
+      const lag = await checkReplicaLag()
+      this.replicaHealth = lag < 1000 // Less than 1 second
+      
+      // Check connection counts
+      this.primaryLoad = await getConnectionCount('primary')
+      this.replicaLoad = await getConnectionCount('replica')
+      
+      // Alert if imbalanced
+      if (this.primaryLoad > this.replicaLoad * 2) {
+        console.warn('Primary overloaded, consider scaling')
+      }
+    } catch (error) {
+      this.replicaHealth = false
+    }
+  }
+}
+```
+
+### Cost Optimization
+
+```typescript
+// Replica usage reduces primary compute costs
+const costAnalysis = {
+  withoutReplica: {
+    primaryCompute: 'Large (4 CPU)', // Handles all load
+    monthlyCost: 400,
+    maxConnections: 100
+  },
+  
+  withReplica: {
+    primaryCompute: 'Small (1 CPU)', // Only writes
+    replicaCompute: 'Medium (2 CPU)', // All reads
+    monthlyCost: 150 + 200, // Total: 350
+    maxConnections: 50 + 100, // Total: 150
+    savings: '12.5% cost reduction, 50% more connections'
+  }
+}
+```
+
+### Failover Strategy
+
+```typescript
+// Automatic failover if replica fails
+export async function executeQuery(query: string) {
+  try {
+    // Try replica first for reads
+    if (isReadQuery(query)) {
+      return await replicaDb.execute(query)
+    }
+  } catch (error) {
+    console.error('Replica failed, falling back to primary', error)
+    // Fallback to primary
+    return await primaryDb.execute(query)
+  }
+  
+  // Writes always go to primary
+  return await primaryDb.execute(query)
+}
+```
+
+### Best Practices
+
+1. **Connection Pooling**: Use pooled connections for application queries
+2. **Direct Connections**: Reserve for Electric SQL and migrations only
+3. **Monitoring**: Track replica lag and connection distribution
+4. **Failover**: Implement automatic fallback to primary
+5. **Load Testing**: Verify replica can handle expected read load
+6. **Cost Analysis**: Monitor usage to optimize compute sizing

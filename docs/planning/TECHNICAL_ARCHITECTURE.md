@@ -1,379 +1,454 @@
 # Turns Management - Technical Architecture Document
 
 ## Project Overview
-A modern, scalable web application for property turns management, migrating from Odoo ERP to a standalone Next.js application.
+A modern, **local-first** web application for property turns management, leveraging Electric SQL for real-time sync and offline capabilities. This architecture provides native-app performance with web deployment simplicity, similar to Linear or Figma.
+
+## Architecture Philosophy
+
+### Local-First Principles
+- **Offline by Default**: Full functionality without internet connection
+- **Instant UI**: No loading states for synced data
+- **Real-time Collaboration**: Automatic sync across all clients
+- **Optimistic Updates**: Immediate UI feedback with background sync
+- **Conflict-Free**: Automated conflict resolution with audit trail
 
 ## Technology Stack
 
-### Frontend
+### Frontend (Client-Side)
 - **Framework**: Next.js 14+ (App Router)
+- **Local Database**: PGlite (SQLite-compatible in-browser database)
+- **Sync Engine**: Electric SQL Client
+- **ORM**: Drizzle ORM (client schema)
 - **Styling**: Tailwind CSS v4
 - **UI Components**: shadcn/ui
-- **State Management**: Zustand / TanStack Query
+- **State Management**: Local database + React hooks
 - **Forms**: React Hook Form + Zod validation
 - **Charts**: Recharts / Tremor
 - **Tables**: TanStack Table
+- **PWA**: Service Workers for offline support
 
-### Backend
-- **API**: Next.js API Routes (tRPC for type safety)
-- **Database**: PostgreSQL with Drizzle ORM
-- **Authentication**: Better-Auth (formerly NextAuth.js)
+### Backend (Minimal Server-Side)
+- **Database**: Neon Postgres (serverless, with branching)
+- **Sync Service**: Electric SQL (Docker container)
+- **ORM**: Drizzle ORM (server schema)
+- **Authentication**: Better-Auth
+- **API**: Next.js API Routes (write operations only)
 - **File Storage**: AWS S3 / Cloudinary
-- **Email**: Resend / SendGrid
-- **Background Jobs**: BullMQ with Redis
-- **Realtime**: Pusher / Socket.io
+- **Email**: Resend (for notifications)
 
 ### Infrastructure
-- **Hosting**: Vercel / AWS
-- **Database**: Supabase / Neon / AWS RDS
-- **Cache**: Redis (Upstash)
-- **Monitoring**: Sentry, LogRocket
-- **Analytics**: PostHog / Plausible
+- **Hosting**: Vercel (Next.js) + Fly.io (Electric)
+- **Database**: Neon (serverless Postgres)
+- **CDN**: Vercel Edge Network
+- **Monitoring**: Sentry, PostHog
+- **Container Registry**: Docker Hub
 
 ## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         Client Layer                         │
+│                     Client Applications                      │
 ├─────────────────────────────────────────────────────────────┤
-│  Next.js App (SSR/SSG)  │  Mobile PWA  │  Desktop App       │
+│   Browser (PWA)   │   Mobile Web   │   Desktop (Tauri)      │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │                    PGlite Database                   │   │
+│  │  • Local SQLite-compatible database                  │   │
+│  │  • Drizzle ORM client schema                        │   │
+│  │  • Offline data persistence                         │   │
+│  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
+                            │ ▲
+                            │ │ Bidirectional Sync
+                            ▼ │
 ┌─────────────────────────────────────────────────────────────┐
-│                      API Gateway Layer                       │
+│                    Electric SQL Sync Layer                   │
 ├─────────────────────────────────────────────────────────────┤
-│  Next.js API Routes  │  tRPC  │  REST API  │  GraphQL       │
+│  • Shape subscriptions (partial replication)                 │
+│  • Real-time streaming of database changes                   │
+│  • Automatic conflict resolution                             │
+│  • Connection management and retry logic                     │
 └─────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
+                            │ ▲
+                            │ │ Logical Replication
+                            ▼ │
 ┌─────────────────────────────────────────────────────────────┐
-│                     Business Logic Layer                     │
+│                      Neon Postgres                           │
 ├─────────────────────────────────────────────────────────────┤
-│  Services  │  Validators  │  Permissions  │  Workflows      │
+│  • Serverless PostgreSQL with autoscaling                   │
+│  • Branch databases for dev/test                            │
+│  • Point-in-time recovery                                   │
+│  • Drizzle ORM server schema                                │
 └─────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
+                            │ ▲
+                            │ │ Write Operations
+                            ▼ │
 ┌─────────────────────────────────────────────────────────────┐
-│                        Data Layer                            │
+│                    Write API (Minimal)                       │
 ├─────────────────────────────────────────────────────────────┤
-│  Drizzle ORM  │  PostgreSQL  │  Redis Cache  │  S3 Storage  │
+│  • Authentication (Better-Auth)                              │
+│  • Business logic validation                                 │
+│  • Complex transactions                                      │
+│  • External integrations                                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Core Modules
+## Data Flow Patterns
+
+### Read Path (Primary)
+```
+User Action → PGlite Query → Instant UI Update
+                    ↑
+            Electric Sync (Background)
+                    ↑
+              Neon Postgres
+```
+
+### Write Path
+```
+User Action → Optimistic Local Update → UI Update
+                    ↓
+            Write to PGlite (synced=false)
+                    ↓
+            Batch sync to API
+                    ↓
+            Validate & Write to Neon
+                    ↓
+            Electric propagates to all clients
+```
+
+## Shape Definitions (Partial Replication)
+
+### Core Shapes
+```typescript
+// Property Shape - Syncs property data for user's assigned properties
+const propertyShape = {
+  table: 'properties',
+  where: 'property_manager_id = $1 OR sr_property_manager_id = $1',
+  include: ['turns', 'documents', 'utilities']
+}
+
+// Active Turns Shape - Only active turns with related data
+const activeTurnsShape = {
+  table: 'turns',
+  where: 'is_active = true AND stage_id != $completed_stage_id',
+  include: ['property', 'vendor', 'documents', 'approvals']
+}
+
+// Vendor Shape - Available vendors
+const vendorShape = {
+  table: 'vendors',
+  where: 'is_active = true AND is_approved = true'
+}
+
+// User Notifications Shape
+const notificationShape = {
+  table: 'notifications',
+  where: 'user_id = $1 AND created_at > $2',
+  params: [userId, thirtyDaysAgo]
+}
+```
+
+## Core Modules (Local-First Design)
 
 ### 1. Authentication & Authorization
-- Multi-tenant support
-- Role-based access control (RBAC)
-- SSO integration capabilities
-- Session management
+- **Local**: User session cached in PGlite
+- **Sync**: Permissions synced from server
+- **Offline**: Full access to cached data
+- **Online**: Token refresh and validation
 
 ### 2. Property Management
-- CRUD operations for properties
-- Bulk import/export
-- Property status tracking
-- Document management
+- **Local Operations**: Browse, search, filter properties
+- **Sync**: Real-time property updates
+- **Write API**: Create/update properties
+- **Conflict Resolution**: Server timestamp wins
 
 ### 3. Turns Management
-- Workflow engine with customizable stages
-- Vendor assignment and tracking
-- Approval workflows (DFO, HO)
-- Document and photo management
-- Lock box management
+- **Kanban Board**: Fully local drag-and-drop
+- **Optimistic Updates**: Instant stage transitions
+- **Approval Flow**: Queue approvals when offline
+- **Documents**: Local preview, background upload
 
-### 4. Utility Management
-- Utility provider tracking
-- Bill management
-- Payment processing
-- Schedule management
+### 4. Vendor Management
+- **Vendor Database**: Fully synced locally
+- **Assignment**: Optimistic with validation
+- **Performance Metrics**: Calculated locally
+- **Ratings**: Synced across all users
 
 ### 5. Reporting & Analytics
-- Real-time dashboards
-- Custom report builder
-- Export capabilities (PDF, Excel)
-- Performance metrics
+- **Local Calculations**: Instant report generation
+- **Data Aggregation**: PGlite SQL queries
+- **Export**: Client-side PDF/Excel generation
+- **Historical Data**: Synced based on date range
 
-### 6. Notifications
-- Email notifications
-- In-app notifications
-- SMS (optional)
-- Push notifications (PWA)
+### 6. Audit Logging
+- **Local Trail**: Every action logged locally
+- **Sync Metadata**: Track sync status per record
+- **Conflict History**: Maintain resolution log
+- **Compliance**: Full offline audit capability
 
-### 7. Audit Logging (Enterprise Feature)
-- Comprehensive change tracking for all entities
-- User activity logging
-- System event logging
-- Compliance reporting
-- Change history views
-- Rollback capabilities
-- Data retention policies
+## Database Schema Design
 
-## Data Models (Key Entities)
-
-### Property
+### Server Schema (Neon Postgres)
 ```typescript
-interface Property {
-  id: string
-  propertyId: string
-  name: string
-  address: Address
-  type: PropertyType
-  status: PropertyStatus
-  core: boolean
-  yearBuilt: number
-  area: number
-  bedrooms: number
-  bathrooms: number
-  market: string
-  owner: string
-  propertyManager: User
-  utilities: Utility[]
-  turns: Turn[]
-  documents: Document[]
-  createdAt: Date
-  updatedAt: Date
+// Standard tables with Electric-compatible design
+interface ServerTable {
+  id: uuid
+  created_at: timestamp
+  updated_at: timestamp
+  created_by: uuid
+  updated_by: uuid
+  version: integer // For optimistic locking
 }
 ```
 
-### Turn
+### Client Schema (PGlite)
 ```typescript
-interface Turn {
-  id: string
-  turnId: string
-  property: Property
-  stage: TurnStage
-  status: TurnStatus
-  vendor: Vendor
-  amounts: TurnAmounts
-  dates: TurnDates
-  approvals: Approval[]
-  documents: Document[]
-  lockBoxInfo: LockBoxInfo
-  utilities: UtilityStatus
-  history: TurnHistory[]
-  createdAt: Date
-  updatedAt: Date
+// Extended with sync metadata
+interface ClientTable extends ServerTable {
+  _synced: boolean
+  _sent_to_server: boolean
+  _modified_columns: string[]
+  _local_modified_at: timestamp
+  _sync_error: string?
 }
 ```
 
-### TurnStage
-```typescript
-interface TurnStage {
-  id: string
-  name: string
-  order: number
-  emailNotifications: boolean
-  requiredFields: string[]
-  autoActions: Action[]
-  color: string
-}
+## Sync Configuration
+
+### Electric Service Setup
+```yaml
+electric:
+  database_url: ${NEON_DATABASE_URL}
+  auth:
+    mode: secure
+    secret: ${ELECTRIC_SECRET}
+  shapes:
+    ttl: 3600 # 1 hour cache
+    max_size: 10MB
+  http:
+    port: 3000
+    compression: true
 ```
 
-### AuditLog (Enterprise Feature)
+### Shape Subscription Management
 ```typescript
-interface AuditLog {
-  id: string
-  tableName: string
-  recordId: string
-  action: 'CREATE' | 'UPDATE' | 'DELETE'
-  userId: string
-  userEmail: string
-  userName: string
-  ipAddress: string
-  userAgent: string
-  oldValues: Record<string, any>
-  newValues: Record<string, any>
-  changedFields: string[]
-  metadata: {
-    propertyId?: string
-    turnId?: string
-    context?: string
+class ShapeManager {
+  // Subscribe to shapes based on user context
+  async initializeShapes(userId: string) {
+    await this.subscribeToShape('properties', { 
+      where: `manager_id = ${userId}` 
+    })
+    await this.subscribeToShape('active_turns')
+    await this.subscribeToShape('notifications', { 
+      where: `user_id = ${userId}` 
+    })
   }
-  timestamp: Date
+  
+  // Dynamic shape updates
+  async updateShapeFilter(shape: string, newFilter: object) {
+    await this.unsubscribe(shape)
+    await this.subscribeToShape(shape, newFilter)
+  }
 }
 ```
 
-## API Design
+## Offline Capabilities
 
-### RESTful Endpoints
-```
-# Properties
-GET    /api/properties
-POST   /api/properties
-GET    /api/properties/:id
-PUT    /api/properties/:id
-DELETE /api/properties/:id
+### Service Worker Strategy
+```javascript
+// Cache-first for app shell
+// Network-first for API calls
+// Background sync for writes
 
-# Turns
-GET    /api/turns
-POST   /api/turns
-GET    /api/turns/:id
-PUT    /api/turns/:id
-PATCH  /api/turns/:id/stage
-POST   /api/turns/:id/approve
-POST   /api/turns/:id/reject
-
-# Reports
-GET    /api/reports/turns
-GET    /api/reports/properties
-GET    /api/reports/vendors
-POST   /api/reports/export
+self.addEventListener('sync', event => {
+  if (event.tag === 'sync-writes') {
+    event.waitUntil(syncPendingWrites())
+  }
+})
 ```
 
-### tRPC Procedures
-```typescript
-// Property procedures
-propertyRouter.query.getAll
-propertyRouter.query.getById
-propertyRouter.mutation.create
-propertyRouter.mutation.update
-propertyRouter.mutation.delete
+### Conflict Resolution
+1. **Last Write Wins**: Default strategy with version tracking
+2. **Merge Strategy**: For collaborative text fields
+3. **User Resolution**: For critical conflicts
+4. **Audit Trail**: All conflicts logged
 
-// Turn procedures
-turnRouter.query.getAll
-turnRouter.query.getById
-turnRouter.mutation.create
-turnRouter.mutation.updateStage
-turnRouter.mutation.approve
-turnRouter.mutation.reject
-```
+## Performance Optimizations
+
+### Client-Side
+- **Instant UI**: All reads from local database
+- **Virtual Scrolling**: For large lists
+- **Lazy Shape Loading**: Subscribe on-demand
+- **Indexed Queries**: PGlite indexes for common queries
+- **Debounced Sync**: Batch write operations
+
+### Server-Side
+- **Neon Autoscaling**: Automatic compute scaling
+- **Connection Pooling**: PgBouncer integration
+- **Logical Replication**: Minimal overhead
+- **Shape Caching**: CDN for shape responses
+
+### Network
+- **Compression**: Gzip for shape data
+- **Delta Sync**: Only changed fields
+- **Resumable Sync**: Handle connection drops
+- **Progressive Enhancement**: Work without sync
 
 ## Security Considerations
 
-### Authentication
-- JWT tokens with refresh mechanism
-- Session-based authentication
-- Multi-factor authentication (MFA)
-- Password policies
+### Data Security
+- **Encryption**: TLS for sync, encrypted at rest
+- **Row-Level Security**: Postgres RLS policies
+- **Shape Authorization**: Server-side filtering
+- **Token Management**: Secure refresh flow
 
-### Authorization
-- Role-based permissions
-- Resource-level permissions
-- API rate limiting
-- Input validation and sanitization
+### Sync Security
+- **Authenticated Shapes**: User-scoped data only
+- **Write Validation**: Server-side business rules
+- **Audit Everything**: Complete activity log
+- **Rate Limiting**: Per-user shape limits
 
-### Data Protection
-- Encryption at rest (database)
-- Encryption in transit (HTTPS)
-- PII data masking
-- Audit logging
+## Deployment Architecture
 
-## Performance Optimization
-
-### Frontend
-- Code splitting and lazy loading
-- Image optimization (Next.js Image)
-- Static generation where possible
-- Client-side caching
-
-### Backend
-- Database indexing
-- Query optimization
-- Redis caching layer
-- Connection pooling
-
-### Infrastructure
-- CDN for static assets
-- Auto-scaling
-- Load balancing
-- Database replication
-
-## Deployment Strategy
-
-### Environments
-1. **Development**: Local development
-2. **Staging**: Testing and QA
-3. **Production**: Live environment
-
-### CI/CD Pipeline
+### Development
 ```yaml
-pipeline:
-  - lint
-  - test
-  - build
-  - deploy
+# docker-compose.dev.yml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: turns_dev
+  
+  electric:
+    image: electricsql/electric:latest
+    environment:
+      DATABASE_URL: postgresql://...
+      ELECTRIC_INSECURE: true
+  
+  app:
+    build: .
+    environment:
+      NEXT_PUBLIC_ELECTRIC_URL: http://localhost:3000
 ```
 
-### Deployment Process
-1. Code push to GitHub
-2. GitHub Actions trigger
-3. Run tests and linting
-4. Build Docker image
-5. Deploy to Vercel/AWS
-6. Run database migrations
-7. Health checks
-8. Monitoring alerts
+### Production
+```yaml
+# Neon (Database)
+- Automatic backups
+- Branch per PR
+- Connection pooling
 
-## Monitoring & Logging
+# Fly.io (Electric)
+- Multi-region deployment
+- Automatic SSL
+- Health checks
 
-### Application Monitoring
-- Sentry for error tracking
-- LogRocket for session replay
-- Custom metrics dashboard
-
-### Infrastructure Monitoring
-- Uptime monitoring
-- Performance metrics
-- Database metrics
-- API response times
-
-### Logging Strategy
-- Structured logging (JSON)
-- Log levels (ERROR, WARN, INFO, DEBUG)
-- Centralized log management
-- Log retention policies
-
-## Scalability Considerations
-
-### Horizontal Scaling
-- Stateless application design
-- Load balancer configuration
-- Database read replicas
-- Caching strategies
-
-### Vertical Scaling
-- Resource optimization
-- Database performance tuning
-- Query optimization
-- Index management
+# Vercel (Next.js)
+- Edge functions
+- Static optimization
+- Incremental Static Regeneration
+```
 
 ## Migration Strategy
 
-### Phase 1: Data Migration
-1. Export data from Odoo
-2. Transform data to new schema
-3. Import to PostgreSQL
-4. Validate data integrity
+### Phase 1: Infrastructure Setup (Week 1-2)
+1. Setup Neon database with schema
+2. Deploy Electric SQL service
+3. Configure PGlite in Next.js
+4. Implement basic shape subscriptions
 
-### Phase 2: Feature Parity
-1. Implement core features
-2. User acceptance testing
-3. Performance testing
-4. Security audit
+### Phase 2: Core Features (Week 3-6)
+1. Migrate property management to local-first
+2. Implement turns workflow with sync
+3. Add vendor management shapes
+4. Setup offline capabilities
 
-### Phase 3: Rollout
-1. Pilot with small user group
-2. Gradual rollout
-3. Full migration
-4. Odoo decommission
+### Phase 3: Advanced Features (Week 7-10)
+1. Complex approval workflows
+2. Document sync and storage
+3. Reporting and analytics
+4. Audit logging system
+
+### Phase 4: Optimization (Week 11-12)
+1. Performance tuning
+2. Conflict resolution refinement
+3. Security hardening
+4. Production deployment
 
 ## Development Guidelines
 
-### Code Standards
-- TypeScript strict mode
-- ESLint + Prettier
-- Conventional commits
-- Code review process
+### Local-First Principles
+1. **Always Read Local**: Never fetch data that's already synced
+2. **Optimistic Updates**: Update UI immediately
+3. **Queue Writes**: Batch and retry failed writes
+4. **Handle Offline**: Graceful degradation
+5. **Sync Status**: Show sync indicators
+
+### Code Organization
+```
+src/
+├── db/
+│   ├── schema/          # Drizzle schemas
+│   ├── migrations/       # SQL migrations
+│   └── client.ts        # PGlite client
+├── sync/
+│   ├── shapes/          # Shape definitions
+│   ├── manager.ts       # Shape subscription manager
+│   └── conflicts.ts     # Conflict resolution
+├── features/
+│   ├── properties/      # Property management
+│   ├── turns/          # Turn workflows
+│   └── vendors/        # Vendor management
+└── api/
+    ├── write/          # Write endpoints
+    └── sync/           # Sync proxy endpoints
+```
 
 ### Testing Strategy
-- Unit tests (Jest)
-- Integration tests
-- E2E tests (Playwright)
-- Performance tests
+- **Unit Tests**: Logic and utilities
+- **Integration Tests**: Sync flows
+- **Offline Tests**: Service worker scenarios
+- **E2E Tests**: Full user workflows
+- **Sync Tests**: Conflict scenarios
 
-### Documentation
-- API documentation (OpenAPI)
-- Code documentation (JSDoc)
-- User documentation
-- Deployment guides
+## Monitoring & Analytics
+
+### Key Metrics
+- **Sync Latency**: Time to propagate changes
+- **Offline Usage**: Time spent offline
+- **Conflict Rate**: Frequency of conflicts
+- **Shape Size**: Data volume per user
+- **Write Queue**: Pending operations
+
+### Observability
+```typescript
+// Track sync performance
+Electric.on('sync:complete', (stats) => {
+  analytics.track('sync_complete', {
+    duration: stats.duration,
+    records: stats.recordCount,
+    conflicts: stats.conflictCount
+  })
+})
+```
+
+## Benefits of This Architecture
+
+### User Experience
+- ⚡ **Instant Response**: No loading spinners
+- 📱 **Works Offline**: Full functionality
+- 🔄 **Real-time Updates**: See changes immediately
+- 🚀 **Fast Navigation**: No page loads
+
+### Development
+- 🎯 **Simplified State**: Database is the state
+- 🔧 **Better DX**: Fewer loading states
+- 🐛 **Easier Debugging**: Local data inspection
+- 📦 **Smaller Bundle**: Less state management code
+
+### Operations
+- 💰 **Lower Costs**: Reduced API calls
+- 📈 **Better Scalability**: Client-side computation
+- 🔒 **Improved Security**: Less surface area
+- 🌍 **Global Performance**: Local-first is CDN-like
