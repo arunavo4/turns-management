@@ -12,7 +12,6 @@ import {
   IconCurrencyDollar,
   IconCalendar,
   IconPlus,
-  IconFilter,
   IconLayoutGrid,
   IconList,
   IconEye,
@@ -26,7 +25,6 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";

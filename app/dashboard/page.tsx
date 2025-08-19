@@ -8,11 +8,8 @@ import {
   IconCurrencyDollar,
   IconClock,
   IconAlertTriangle,
-  IconTrendingUp,
   IconChevronRight,
   IconMapPin,
-  IconCalendar,
-  IconStar,
 } from "@tabler/icons-react";
 import {
   Card,
@@ -32,7 +29,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Separator } from "@/components/ui/separator";
 import { 
   mockDashboardMetrics, 
   mockTurns, 
@@ -73,7 +69,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back! Here's your property management overview.
+            Welcome back! Here&apos;s your property management overview.
           </p>
         </div>
 

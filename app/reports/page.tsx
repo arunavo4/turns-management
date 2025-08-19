@@ -3,19 +3,14 @@
 import { useState } from "react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
-  IconCalendar,
   IconDownload,
-  IconFilter,
   IconTrendingUp,
   IconTrendingDown,
   IconCurrencyDollar,
   IconClock,
   IconBuilding,
   IconRefresh,
-  IconUsers,
   IconChartBar,
-  IconPieChart,
-  IconFileText,
   IconStar,
   IconAlertTriangle,
 } from "@tabler/icons-react";
@@ -37,18 +32,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   LineChart,
   Line,
-  AreaChart,
   Area,
+  AreaChart,
   BarChart,
   Bar,
   PieChart,
@@ -62,7 +49,6 @@ import {
 } from 'recharts';
 import { 
   mockDashboardMetrics, 
-  mockTurns,
   mockVendors,
   formatCurrency,
   formatDate 
@@ -70,7 +56,6 @@ import {
 
 export default function ReportsPage() {
   const [timeRange, setTimeRange] = useState("30d");
-  const [reportType, setReportType] = useState("overview");
 
   // Generate sample data for charts
   const monthlyRevenueData = [
@@ -407,7 +392,7 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {propertyTypeData.map((type, index) => (
+                {propertyTypeData.map((type) => (
                   <div key={type.type} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{type.type}</span>
