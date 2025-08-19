@@ -132,7 +132,7 @@ export default function SignUpPage() {
               <div className="text-sm text-red-500 text-center">{error}</div>
             )}
           </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
+          <CardFooter className="flex flex-col space-y-6">
             <Button 
               type="submit" 
               className="w-full" 

@@ -60,38 +60,25 @@ const baseColumns = {
   updatedBy: uuid('updated_by')
 };
 
-// Users table (for Better Auth)
-export const users = pgTable('users', {
+// Import Better Auth generated schema for auth tables
+import { user, session, account, verification as authVerification } from './auth-schema';
+
+// Re-export auth tables
+export { user, session, account };
+export const verification = authVerification;
+
+// Extended user table for our app (separate from Better Auth user table)
+export const users = pgTable('app_users', {
   ...baseColumns,
-  email: varchar('email', { length: 255 }).unique().notNull(),
-  emailVerified: boolean('email_verified').default(false),
-  name: varchar('name', { length: 255 }),
-  image: text('image'),
+  authUserId: text('auth_user_id').notNull().references(() => user.id, { onDelete: 'cascade' }).unique(),
   role: userRoleEnum('role').default('PROPERTY_MANAGER'),
   phone: varchar('phone', { length: 20 }),
   active: boolean('active').default(true)
 });
 
-// Sessions table (for Better Auth)
-export const sessions = pgTable('sessions', {
-  id: varchar('id', { length: 255 }).primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  expiresAt: timestamp('expires_at').notNull(),
-  ipAddress: varchar('ip_address', { length: 45 }),
-  userAgent: text('user_agent')
-});
-
-// Accounts table (for Better Auth OAuth)
-export const accounts = pgTable('accounts', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  accountId: varchar('account_id', { length: 255 }).notNull(),
-  providerId: varchar('provider_id', { length: 255 }).notNull(),
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  expiresAt: timestamp('expires_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull()
-});
+// Aliases for backward compatibility
+export const sessions = session;
+export const accounts = account;
 
 // Properties table
 export const properties = pgTable('properties', {
@@ -108,8 +95,8 @@ export const properties = pgTable('properties', {
   squareFeet: integer('square_feet'),
   yearBuilt: integer('year_built'),
   monthlyRent: decimal('monthly_rent', { precision: 10, scale: 2 }),
-  propertyManagerId: uuid('property_manager_id').references(() => users.id),
-  seniorPropertyManagerId: uuid('senior_property_manager_id').references(() => users.id),
+  propertyManagerId: text('property_manager_id').references(() => users.id),
+  seniorPropertyManagerId: text('senior_property_manager_id').references(() => users.id),
   isCore: boolean('is_core').default(true),
   lastTurnDate: timestamp('last_turn_date'),
   utilities: jsonb('utilities').default({
@@ -186,8 +173,8 @@ export const turns = pgTable('turns', {
   // Approval
   needsDfoApproval: boolean('needs_dfo_approval').default(false),
   needsHoApproval: boolean('needs_ho_approval').default(false),
-  dfoApprovedBy: uuid('dfo_approved_by').references(() => users.id),
-  hoApprovedBy: uuid('ho_approved_by').references(() => users.id),
+  dfoApprovedBy: text('dfo_approved_by').references(() => users.id),
+  hoApprovedBy: text('ho_approved_by').references(() => users.id),
   dfoApprovedAt: timestamp('dfo_approved_at'),
   hoApprovedAt: timestamp('ho_approved_at'),
   rejectionReason: text('rejection_reason'),
@@ -223,7 +210,7 @@ export const turnHistory = pgTable('turn_history', {
   newStatus: turnStatusEnum('new_status'),
   previousStageId: uuid('previous_stage_id'),
   newStageId: uuid('new_stage_id'),
-  changedBy: uuid('changed_by').references(() => users.id),
+  changedBy: text('changed_by').references(() => users.id),
   comment: text('comment'),
   changedData: jsonb('changed_data')
 });
@@ -240,7 +227,7 @@ export const documents = pgTable('documents', {
   url: text('url').notNull(),
   category: varchar('category', { length: 50 }),
   description: text('description'),
-  uploadedBy: uuid('uploaded_by').references(() => users.id)
+  uploadedBy: text('uploaded_by').references(() => users.id)
 });
 
 // Relations
