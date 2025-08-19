@@ -1,7 +1,16 @@
 # Missing Features - Turns Management System
 
 ## Overview
-This document tracks all missing features that need to be implemented to achieve feature parity with the existing Odoo system and complete the local-first architecture.
+This document tracks remaining features needed to complete the Turns Management System. Updated as of the current implementation status.
+
+## Current Implementation Status
+✅ **Completed Features:**
+- Database setup (Neon Postgres connected and seeded)
+- Authentication system (Better Auth with email/password)
+- Electric SQL configuration (source ID and secret configured)
+- Full CRUD API routes for Properties, Turns, and Vendors
+- Properties page with real data, search, filtering, and delete functionality
+- Homepage redirects to login page
 
 ## Priority Levels
 - 🔴 **Critical**: Core functionality required for MVP
@@ -10,325 +19,257 @@ This document tracks all missing features that need to be implemented to achieve
 
 ---
 
-## 🔴 Critical Features (Week 1-2)
+## 🔴 Critical Features (Week 1)
 
-### 1. Database & Sync Infrastructure
-- [ ] **Neon Postgres Setup**
-  - Create primary database
-  - Configure read replica
-  - Set up logical replication
-  - Create development branches
+### 1. Complete UI Data Integration
+- [ ] **Turns Page**
+  - Connect to API endpoint `/api/turns`
+  - Display real turn data with property and vendor info
+  - Implement Kanban board drag-and-drop
+  - Add status updates and stage changes
 
-- [ ] **Electric SQL Deployment**
-  - Deploy Electric service (Fly.io or Docker)
-  - Configure shapes and permissions
-  - Set up monitoring
-  - Test replication pipeline
+- [ ] **Vendors Page**
+  - Connect to API endpoint `/api/vendors`
+  - Display vendor list with performance metrics
+  - Add approve/deactivate actions
+  - Show assigned turns count
 
-- [ ] **PGlite Integration**
-  - Install and configure PGlite
-  - Set up IndexedDB storage
-  - Create dual Drizzle schemas (client/server)
-  - Implement sync metadata columns
+- [ ] **Dashboard Updates**
+  - Replace mock data with real API calls
+  - Show actual metrics from database
+  - Implement real-time updates
 
-- [ ] **Authentication System**
-  - Integrate Better-Auth
-  - User login/logout flows
-  - Session management
-  - Role-based permissions (SUPER_ADMIN, ADMIN, PROPERTY_MANAGER, SR_PROPERTY_MANAGER, VENDOR, DFO_APPROVER, HO_APPROVER)
+### 2. Create/Edit Forms
 
-### 2. Core CRUD Operations
+#### Properties Forms
+- [ ] **Create Property Dialog**
+  - Form with all property fields
+  - Manager assignment dropdown
+  - Validation with error messages
+  - Success notification
 
-#### Turns Management
-- [ ] **Create Turn Form**
-  - Property selection
-  - Move-out date
-  - Initial scope definition
-  - Cost estimation
-  - Priority setting
-  
-- [ ] **Edit Turn Form**
+- [ ] **Edit Property Dialog**
+  - Pre-populate with existing data
+  - Update API integration
+  - Optimistic UI updates
+
+#### Turns Forms
+- [ ] **Create Turn Dialog**
+  - Property selection (dropdown)
+  - Vendor assignment (optional)
+  - Cost estimation fields
+  - Initial scope text area
+  - Priority selection
+
+- [ ] **Edit Turn Dialog**
   - Update turn details
   - Change status/stage
-  - Modify cost estimates
-  - Update vendor assignment
-  
-- [ ] **Turn Workflow Actions**
-  - Submit for DFO approval
-  - Submit for HO approval
-  - Approve/Reject with reasons
-  - Complete turn
-  - Cancel turn
+  - Vendor reassignment
+  - Cost updates with history
 
-#### Properties Management
-- [ ] **Create Property Form**
-  - Property details (address, type, size)
-  - Manager assignments (PM and Sr PM)
-  - Core/Non-core flag
-  - Year built
-  - Market designation
-  
-- [ ] **Edit Property Form**
-  - Update property details
-  - Change manager assignments
-  - Update status
-
-#### Vendors Management
-- [ ] **Create Vendor Form**
+#### Vendors Forms
+- [ ] **Create Vendor Dialog**
   - Company information
   - Contact details
-  - Specialties
-  - Insurance/certification info
-  
-- [ ] **Edit Vendor Form**
-  - Update vendor details
-  - Manage certifications
-  - Update insurance expiry
+  - Specialties (multi-select)
+  - Insurance expiry date picker
+
+- [ ] **Edit Vendor Dialog**
+  - Update vendor information
+  - Performance metrics (read-only)
+  - Approval status toggle
 
 ---
 
-## 🟡 Important Features (Week 3-4)
+## 🟡 Important Features (Week 2)
 
-### 3. Turn-Specific Features
+### 3. Approval Workflow
 
-- [ ] **Work Order (WO) Number Tracking**
-  - Auto-generate WO numbers
-  - Link to turns
-  - Display in turn details
+- [ ] **DFO/HO Approval System**
+  - Approval threshold configuration ($3000)
+  - Approval request notifications
+  - Approve/Reject buttons with reason dialog
+  - Approval history in turn details
+  - Role-based visibility (only approvers see buttons)
 
-- [ ] **Approval Workflow**
-  - DFO approval for amounts < $3000
-  - HO approval for amounts >= $3000
-  - Rejection reason dialog
-  - Approval history tracking
+- [ ] **Turn Workflow Actions**
+  - Submit for approval button
+  - Cancel turn with reason
+  - Complete turn confirmation
+  - Reopen completed turn (admin only)
 
-- [ ] **Turn Stages (Full Implementation)**
-  Currently have 5 stages, need to consider if we implement all 9 from Odoo:
-  - Draft
-  - Secure Property
-  - Inspection
-  - Scope Review
-  - Vendor Assigned
-  - Turns In Progress
-  - Change Order
-  - Turns Complete
-  - 360 Scan
+### 4. User Authentication & Authorization
 
-- [ ] **Vendor Assignment**
-  - Assign vendor to turn
-  - Track vendor performance
-  - View vendor workload
-  - Vendor availability status
+- [ ] **Login System Enhancement**
+  - Email verification flow
+  - Password reset functionality
+  - Remember me option
+  - Session timeout handling
 
-- [ ] **Document Attachments**
-  - Upload documents to turns
-  - Support for images, PDFs
-  - Document categorization
-  - Preview functionality
+- [ ] **Role-Based Access Control**
+  - Implement user roles from schema
+  - Route protection based on roles
+  - UI element visibility based on permissions
+  - Admin user management page
 
-### 4. Property-Specific Features
-
-- [ ] **Move-Out Scheduling**
-  - Schedule move-out dates
-  - Link to turn creation
-  - Calendar view
-  - Notification system
-
-- [ ] **Utility Status Tracking**
-  - Power status (Yes/No)
-  - Water status (Yes/No)
-  - Gas status (Yes/No)
-  - Last update timestamps
-
-- [ ] **Property Metrics**
-  - Average turn time
-  - Turn history
-  - Cost analysis
-  - Occupancy tracking
-
-### 5. Data Sync & Offline
+### 5. Electric SQL Real-Time Sync
 
 - [ ] **Shape Definitions**
   ```typescript
-  shapes: {
-    properties: { where: 'manager_id = $userId' },
-    activeTurns: { where: 'is_active = true' },
-    vendors: { where: 'is_approved = true' },
-    turnStages: { /* reference data */ }
-  }
+  // Properties synced based on manager assignment
+  useShape({
+    table: 'properties',
+    where: `property_manager_id = '${userId}'`
+  })
+  
+  // Active turns only
+  useShape({
+    table: 'turns',
+    where: 'status != "complete"'
+  })
   ```
 
-- [ ] **Optimistic Updates (Pattern 3)**
-  - Zustand store for write queue
-  - PGlite local writes
-  - Background sync to server
-  - Conflict resolution
-
-- [ ] **Offline Indicators**
-  - Connection status badge
-  - Sync progress indicators
-  - Pending writes counter
-  - Error notifications
+- [ ] **Offline Support**
+  - Local data persistence
+  - Sync status indicators
+  - Conflict resolution UI
+  - Retry failed syncs
 
 ---
 
-## 🟢 Nice-to-Have Features (Week 5-6)
+## 🟢 Nice-to-Have Features (Week 3+)
 
-### 6. Advanced Turn Features
+### 6. Advanced Features
+
+- [ ] **Document Management**
+  - File upload to turns/properties
+  - Image preview modal
+  - PDF viewer integration
+  - Download functionality
+  - Drag-and-drop upload
+
+- [ ] **Reporting & Analytics**
+  - Turn completion trends chart
+  - Cost analysis by property
+  - Vendor performance comparison
+  - Export to Excel/CSV
+  - Print-friendly reports
+
+- [ ] **Notifications System**
+  - In-app notifications bell
+  - Email notifications for approvals
+  - Turn status change alerts
+  - Vendor assignment notifications
+  - Overdue turn warnings
+
+### 7. Enhanced Turn Features
 
 - [ ] **Change Orders**
-  - Create change order
-  - Track additional costs
-  - Approval workflow
+  - Create change order from turn
+  - Additional cost tracking
+  - Separate approval workflow
   - Link to original turn
 
-- [ ] **360 Scan Integration**
-  - Order InsideMaps/360 scan
-  - Track scan status
-  - View scan results
-  - Link to turn
+- [ ] **Turn History Timeline**
+  - Visual timeline of status changes
+  - User actions log
+  - Cost revision history
+  - Document upload timeline
 
-- [ ] **Appliances Tracking**
-  - Appliances needed flag
-  - Appliances ordered flag
-  - Delivery tracking
-  - Installation status
+- [ ] **Bulk Operations**
+  - Select multiple turns
+  - Bulk status update
+  - Bulk vendor assignment
+  - Bulk export
 
-- [ ] **Trash Out Management**
-  - Trash out needed flag
-  - Schedule trash out
-  - Track completion
-  - Cost tracking
+### 8. Mobile Optimization
 
-- [ ] **Email Notifications**
-  - Turn approval requests
-  - Status updates
-  - Vendor assignments
-  - Completion notifications
+- [ ] **Responsive Design Improvements**
+  - Mobile-friendly navigation
+  - Touch-optimized Kanban board
+  - Swipe actions for list items
+  - Mobile-specific layouts
 
-### 7. Reporting & Analytics
-
-- [ ] **Dashboard Enhancements**
-  - Turn completion trends
-  - Cost analysis charts
-  - Vendor performance metrics
-  - Property portfolio overview
-
-- [ ] **Custom Reports**
-  - Date range selection
-  - Filter by property/vendor/status
-  - Export to Excel/PDF
-  - Scheduled reports
-
-- [ ] **Audit Trail**
-  - Turn history tracking
-  - Status change log
-  - User activity log
-  - Document version history
-
-### 8. Utility Management
-
-- [ ] **Utility Bill Tracking**
-  - Bill upload
-  - Payment tracking
-  - Due date reminders
-  - Cost allocation
-
-- [ ] **PDF Import**
-  - Parse utility bills
-  - Auto-extract amounts
-  - OCR capabilities
-  - Data validation
-
-### 9. Integrations
-
-- [ ] **OneDrive Integration**
-  - Document sync
-  - Automatic backup
-  - Folder structure
-  - Permission management
-
-- [ ] **Email Integration**
-  - Send from system
-  - Track communications
-  - Template management
-  - Auto-responses
+- [ ] **Progressive Web App**
+  - Service worker for offline
+  - App manifest for installation
+  - Push notifications
+  - Background sync
 
 ---
 
 ## Implementation Roadmap
 
-### Phase 1: Foundation (Current)
-✅ UI Framework (Next.js, Tailwind, shadcn/ui)
-✅ Basic pages and navigation
-✅ Mock data structure
-⏳ Fix remaining UI issues
+### ✅ Phase 1: Foundation (COMPLETED)
+- UI Framework setup
+- Database and authentication
+- API routes implementation
+- Basic Properties page with CRUD
 
-### Phase 2: Database Integration (Next)
-- Set up Neon Postgres
-- Create Drizzle schemas
-- Implement Better-Auth
-- Connect to real data
+### ⏳ Phase 2: Core Features (IN PROGRESS)
+- Complete UI data integration
+- Create/Edit forms for all entities
+- Basic approval workflow
+- Role-based access control
 
-### Phase 3: Local-First Architecture
-- Deploy Electric SQL
-- Integrate PGlite
-- Implement sync patterns
-- Add offline capabilities
+### 📅 Phase 3: Sync & Real-time (NEXT)
+- Electric SQL shapes implementation
+- Offline support with conflict resolution
+- Real-time updates across clients
+- Sync status indicators
 
-### Phase 4: Feature Completion
-- Complete CRUD operations
-- Implement approval workflows
-- Add document management
-- Build reporting features
-
-### Phase 5: Polish & Optimization
+### 📅 Phase 4: Polish & Enhancement
+- Advanced features (documents, reports)
+- Mobile optimization
 - Performance tuning
-- Advanced features
-- Integrations
-- Testing & QA
+- User experience improvements
 
 ---
 
-## Technical Debt
+## Technical Improvements Needed
 
-### Current Issues to Fix
-- [x] Icon import errors (IconCheckCircle → IconCircleCheck)
-- [ ] Form validation with Zod
-- [ ] Loading states for async operations
-- [ ] Error handling and user feedback
-- [ ] Accessibility improvements (ARIA labels, keyboard navigation)
-- [ ] Mobile responsiveness optimization
-
-### Architecture Improvements
-- [ ] Implement proper TypeScript types for all entities
+### Code Quality
+- [ ] Add TypeScript strict mode
+- [ ] Implement proper error boundaries
+- [ ] Add loading skeletons for better UX
 - [ ] Create reusable form components
-- [ ] Set up proper API routes structure
-- [ ] Implement proper logging system
-- [ ] Add performance monitoring
+- [ ] Add unit tests for critical functions
+
+### Performance
+- [ ] Implement virtual scrolling for large lists
+- [ ] Add pagination to API endpoints
+- [ ] Optimize bundle size
+- [ ] Implement image lazy loading
+- [ ] Add caching strategy
+
+### Developer Experience
+- [ ] Add API documentation (OpenAPI/Swagger)
+- [ ] Create component storybook
+- [ ] Add E2E tests with Playwright
+- [ ] Set up CI/CD pipeline
+- [ ] Add monitoring and error tracking
 
 ---
 
-## Notes
+## Notes for Next Session
 
-### Vendor Module Justification
-After reviewing the documentation, vendors ARE part of the planned system:
-- Mentioned in PROJECT_PLAN.md (Week 9)
-- Included in database schemas
-- Required for turn assignments
-- Part of the approval workflow
-- Essential for work order management
+### Immediate Next Steps
+1. Update Turns page to use real API data
+2. Update Vendors page to use real API data
+3. Create Add Property form dialog
+4. Implement turn creation from Properties page
+5. Add approval workflow buttons to turn details
 
-### Simplified vs Full Workflow
-Current implementation has 5 stages vs Odoo's 9. Consider:
-- Is the simplified workflow sufficient?
-- Do we need all intermediate stages?
-- Can some stages be combined?
-- User feedback needed for decision
+### API Improvements Needed
+- Fix the `params` async warning in route handlers
+- Add pagination to list endpoints
+- Add search/filter query parameters
+- Implement proper error responses
+- Add request validation
 
-### Local-First Priority
-The architecture emphasizes local-first with Electric SQL. This should be prioritized over adding features to ensure:
-- Instant performance (< 50ms response)
-- Full offline capability
-- Real-time sync across clients
-- Reduced server costs
+### UI Polish
+- Add loading states to all pages
+- Implement error boundaries
+- Add success/error toasts
+- Improve empty states
+- Add confirmation dialogs for destructive actions

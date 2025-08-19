@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconSearch,
@@ -41,12 +41,53 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
-  mockTurns, 
-  mockDashboardMetrics,
   getPriorityColor, 
-  formatCurrency,
-  Turn 
+  formatCurrency
 } from "@/lib/mock-data";
+import { IconLoader2 } from "@tabler/icons-react";
+
+interface Turn {
+  turn: {
+    id: string;
+    turnNumber: string;
+    propertyId: string;
+    status: string;
+    priority: string;
+    stageId: string | null;
+    moveOutDate: string | null;
+    turnAssignmentDate: string | null;
+    turnDueDate: string | null;
+    vendorId: string | null;
+    assignedFlooringVendor: string | null;
+    estimatedCost: string | null;
+    actualCost: string | null;
+    scopeOfWork: string | null;
+    notes: string | null;
+    powerStatus: boolean;
+    waterStatus: boolean;
+    gasStatus: boolean;
+    trashOutNeeded: boolean;
+    appliancesNeeded: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+  property: {
+    id: string;
+    name: string;
+    address: string;
+    city: string;
+    state: string;
+    zipCode: string;
+  } | null;
+  vendor: {
+    id: string;
+    companyName: string;
+  } | null;
+  stage: {
+    id: string;
+    name: string;
+  } | null;
+}
 
 const statusColumns = [
   {
@@ -87,16 +128,40 @@ const statusColumns = [
 ];
 
 export default function TurnsPage() {
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPriority, setFilterPriority] = useState("all");
 
-  const filteredTurns = mockTurns.filter((turn) => {
+  // Fetch turns from API
+  useEffect(() => {
+    fetchTurns();
+  }, []);
+
+  const fetchTurns = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/turns");
+      if (!response.ok) {
+        throw new Error("Failed to fetch turns");
+      }
+      const data = await response.json();
+      setTurns(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredTurns = turns.filter((turnData) => {
     const matchesSearch = 
-      turn.turnNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      turn.property.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      turn.description.toLowerCase().includes(searchQuery.toLowerCase());
+      turnData.turn.turnNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (turnData.property?.name.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (turnData.turn.scopeOfWork?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
     
-    const matchesPriority = filterPriority === "all" || turn.priority === filterPriority;
+    const matchesPriority = filterPriority === "all" || turnData.turn.priority === filterPriority;
     
     return matchesSearch && matchesPriority;
   });
@@ -119,8 +184,8 @@ export default function TurnsPage() {
     return diffDays;
   };
 
-  const TurnCard = ({ turn }: { turn: Turn }) => {
-    const dueInDays = turn.scheduledEndDate ? getDaysFromNow(turn.scheduledEndDate) : null;
+  const TurnCard = ({ turnData }: { turnData: Turn }) => {
+    const dueInDays = turnData.turn.turnDueDate ? getDaysFromNow(turnData.turn.turnDueDate) : null;
     const isOverdue = dueInDays !== null && dueInDays < 0;
     
     return (
@@ -130,9 +195,9 @@ export default function TurnsPage() {
             {/* Header */}
             <div className="flex items-start justify-between">
               <div className="space-y-1">
-                <h4 className="font-medium text-sm">{turn.turnNumber}</h4>
+                <h4 className="font-medium text-sm">{turnData.turn.turnNumber}</h4>
                 <p className="text-xs text-muted-foreground line-clamp-2">
-                  {turn.description}
+                  {turnData.turn.scopeOfWork || "No scope defined"}
                 </p>
               </div>
               <DropdownMenu>
@@ -155,35 +220,30 @@ export default function TurnsPage() {
             </div>
 
             {/* Property Info */}
-            <div className="space-y-2">
-              <div className="text-sm font-medium">{turn.property.name}</div>
-              <div className="flex items-center text-xs text-muted-foreground">
-                <IconMapPin className="mr-1 h-3 w-3" />
-                {turn.property.city}, {turn.property.state}
-              </div>
-            </div>
-
-            {/* Priority & Cost */}
-            <div className="flex items-center justify-between">
-              {getPriorityBadge(turn.priority)}
-              <div className="text-sm font-medium">
-                {formatCurrency(turn.actualCost || turn.estimatedCost)}
-              </div>
-            </div>
-
-            {/* Progress */}
-            {turn.completionRate !== undefined && (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span>Progress</span>
-                  <span>{turn.completionRate}%</span>
+            {turnData.property && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">{turnData.property.name}</div>
+                <div className="flex items-center text-xs text-muted-foreground">
+                  <IconMapPin className="mr-1 h-3 w-3" />
+                  {turnData.property.city}, {turnData.property.state}
                 </div>
-                <Progress value={turn.completionRate} className="h-1.5" />
               </div>
             )}
 
+            {/* Priority & Cost */}
+            <div className="flex items-center justify-between">
+              {getPriorityBadge(turnData.turn.priority)}
+              {(turnData.turn.actualCost || turnData.turn.estimatedCost) && (
+                <div className="text-sm font-medium">
+                  {formatCurrency(parseFloat(turnData.turn.actualCost || turnData.turn.estimatedCost || "0"))}
+                </div>
+              )}
+            </div>
+
+            {/* Progress - removed for now as we don't have this field yet */}
+
             {/* Due Date */}
-            {turn.scheduledEndDate && (
+            {turnData.turn.turnDueDate && (
               <div className="flex items-center text-xs">
                 <IconCalendar className="mr-1 h-3 w-3" />
                 <span className={isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}>
@@ -196,41 +256,38 @@ export default function TurnsPage() {
             )}
 
             {/* Assigned Vendor */}
-            {turn.assignedVendor && (
+            {turnData.vendor && (
               <div className="flex items-center text-xs">
                 <Avatar className="h-5 w-5 mr-2">
                   <AvatarFallback className="text-xs">
-                    {turn.assignedVendor.companyName.substring(0, 2).toUpperCase()}
+                    {turnData.vendor.companyName.substring(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-muted-foreground truncate">
-                  {turn.assignedVendor.companyName}
+                  {turnData.vendor.companyName}
                 </span>
               </div>
             )}
 
-            {/* Scope Tags */}
-            {turn.scope && turn.scope.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {turn.scope.slice(0, 2).map((item, index) => (
-                  <Badge key={index} variant="outline" className="text-xs px-1.5 py-0.5">
-                    {item}
-                  </Badge>
-                ))}
-                {turn.scope.length > 2 && (
-                  <Badge variant="outline" className="text-xs px-1.5 py-0.5">
-                    +{turn.scope.length - 2}
-                  </Badge>
-                )}
-              </div>
-            )}
+            {/* Utilities Status */}
+            <div className="flex gap-2">
+              {turnData.turn.powerStatus && (
+                <Badge variant="outline" className="text-xs px-1.5 py-0.5">Power On</Badge>
+              )}
+              {turnData.turn.waterStatus && (
+                <Badge variant="outline" className="text-xs px-1.5 py-0.5">Water On</Badge>
+              )}
+              {turnData.turn.gasStatus && (
+                <Badge variant="outline" className="text-xs px-1.5 py-0.5">Gas On</Badge>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
     );
   };
 
-  const KanbanColumn = ({ column, turns }: { column: typeof statusColumns[0], turns: Turn[] }) => {
+  const KanbanColumn = ({ column, columnTurns }: { column: typeof statusColumns[0], columnTurns: Turn[] }) => {
     const Icon = column.icon;
     
     return (
@@ -242,15 +299,15 @@ export default function TurnsPage() {
               <h3 className="font-medium">{column.title}</h3>
             </div>
             <Badge variant="secondary" className="h-5 text-xs">
-              {turns.length}
+              {columnTurns.length}
             </Badge>
           </div>
         </div>
         <div className="flex-1 p-3 border-l border-r border-b rounded-b-lg bg-muted/20 min-h-80">
-          {turns.map((turn) => (
-            <TurnCard key={turn.id} turn={turn} />
+          {columnTurns.map((turnData) => (
+            <TurnCard key={turnData.turn.id} turnData={turnData} />
           ))}
-          {turns.length === 0 && (
+          {columnTurns.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-8">
               No turns in this stage
             </div>
@@ -259,6 +316,34 @@ export default function TurnsPage() {
       </div>
     );
   };
+
+  // Calculate metrics from real data
+  const metrics = {
+    activeTurns: turns.filter(t => t.turn.status !== 'completed').length,
+    pendingApprovals: turns.filter(t => t.turn.status === 'dfo_review').length,
+    completedTurns: turns.filter(t => t.turn.status === 'completed').length,
+    totalTurns: turns.length
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <IconLoader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="text-center text-red-600 p-8">
+          Error: {error}
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -285,9 +370,9 @@ export default function TurnsPage() {
               <IconRefresh className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockDashboardMetrics.activeTurns}</div>
+              <div className="text-2xl font-bold">{metrics.activeTurns}</div>
               <p className="text-xs text-muted-foreground">
-                {mockDashboardMetrics.overdueTurns} overdue
+                Currently in progress
               </p>
             </CardContent>
           </Card>
@@ -298,7 +383,7 @@ export default function TurnsPage() {
               <IconAlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockDashboardMetrics.approvalsPending}</div>
+              <div className="text-2xl font-bold">{metrics.pendingApprovals}</div>
               <p className="text-xs text-muted-foreground">
                 Awaiting DFO/HO review
               </p>
@@ -307,26 +392,26 @@ export default function TurnsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Turn Time</CardTitle>
-              <IconClock className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Completed Turns</CardTitle>
+              <IconCircleCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockDashboardMetrics.averageTurnTime} days</div>
+              <div className="text-2xl font-bold">{metrics.completedTurns}</div>
               <p className="text-xs text-muted-foreground">
-                <span className="text-green-600">↓ 0.5</span> days improvement
+                This period
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
-              <IconCircleCheck className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Total Turns</CardTitle>
+              <IconRefresh className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockDashboardMetrics.completionRate}%</div>
+              <div className="text-2xl font-bold">{metrics.totalTurns}</div>
               <p className="text-xs text-muted-foreground">
-                On-time completion rate
+                All time
               </p>
             </CardContent>
           </Card>
@@ -371,12 +456,12 @@ export default function TurnsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {statusColumns.map((column) => {
-              const columnTurns = filteredTurns.filter(turn => turn.status === column.id);
+              const columnTurns = filteredTurns.filter(turnData => turnData.turn.status === column.id);
               return (
                 <KanbanColumn 
                   key={column.id} 
                   column={column} 
-                  turns={columnTurns} 
+                  columnTurns={columnTurns} 
                 />
               );
             })}

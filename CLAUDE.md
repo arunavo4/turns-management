@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Current Implementation Status
+✅ **Working Features:**
+- Database connected (Neon Postgres)
+- Authentication system (Better Auth)
+- Electric SQL configured
+- Full CRUD API routes for Properties, Turns, Vendors
+- Properties page with real data
+- Homepage redirects to login
+
 ## Development Commands
 
 ### Core Commands
@@ -17,6 +26,11 @@ pnpm start
 
 # Run linting
 pnpm lint
+
+# Database operations
+pnpm drizzle-kit generate  # Generate migrations
+pnpm drizzle-kit migrate   # Apply migrations
+pnpm tsx lib/db/seed.ts    # Seed database
 ```
 
 ## Architecture Overview
@@ -103,6 +117,34 @@ Client tables include:
 - `_sentToServer`: Pending server write
 - `_modifiedColumns`: Fields changed locally
 - `_conflictData`: Conflict resolution tracking
+
+## Environment Variables
+
+Required in `.env.local`:
+```env
+# Database (Neon Postgres)
+DATABASE_URL=postgresql://...
+DATABASE_URL_POOLED=postgresql://...
+
+# Electric SQL
+ELECTRIC_URL=https://api.electric-sql.cloud/v1/shape
+ELECTRIC_SOURCE_ID=your-source-id
+ELECTRIC_SOURCE_SECRET=your-jwt-token
+NEXT_PUBLIC_ELECTRIC_URL=https://api.electric-sql.cloud/v1/shape
+NEXT_PUBLIC_ELECTRIC_SOURCE_ID=your-source-id
+NEXT_PUBLIC_ELECTRIC_SOURCE_SECRET=your-jwt-token
+
+# Better Auth
+BETTER_AUTH_SECRET=your-secret
+BETTER_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+## Test Credentials
+
+Seeded users for testing:
+- admin@example.com (role: ADMIN)
+- pm@example.com (role: PROPERTY_MANAGER)
 
 ## Important Patterns
 

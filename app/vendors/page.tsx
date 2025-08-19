@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconSearch,
@@ -20,6 +20,8 @@ import {
   IconFileText,
   IconLayoutGrid,
   IconList,
+  IconLoader2,
+  IconTrash,
 } from "@tabler/icons-react";
 import {
   Card,
@@ -59,33 +61,98 @@ import {
 } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
-  mockVendors, 
   formatCurrency, 
-  formatDate,
-  Vendor 
+  formatDate
 } from "@/lib/mock-data";
+
+interface Vendor {
+  id: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  specialties: string[];
+  insuranceExpiry: string;
+  rating: string | null;
+  isActive: boolean;
+  isApproved: boolean;
+  averageCost: string | null;
+  completedJobs: number;
+  onTimeRate: string | null;
+  lastJobDate: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 type ViewMode = "grid" | "table";
 
 export default function VendorsPage() {
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSpecialty, setFilterSpecialty] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
+  // Fetch vendors from API
+  useEffect(() => {
+    fetchVendors();
+  }, []);
+
+  const fetchVendors = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/vendors");
+      if (!response.ok) {
+        throw new Error("Failed to fetch vendors");
+      }
+      const data = await response.json();
+      setVendors(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this vendor?")) return;
+
+    try {
+      const response = await fetch(`/api/vendors/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete vendor");
+      }
+
+      // Refresh vendors list
+      fetchVendors();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete vendor");
+    }
+  };
+
   // Get all unique specialties
   const allSpecialties = Array.from(
-    new Set(mockVendors.flatMap(vendor => vendor.specialties))
+    new Set(vendors.flatMap(vendor => vendor.specialties || []))
   ).sort();
 
-  const filteredVendors = mockVendors.filter((vendor) => {
+  const filteredVendors = vendors.filter((vendor) => {
     const matchesSearch = 
       vendor.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       vendor.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.specialties.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
+      (vendor.specialties || []).some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesSpecialty = filterSpecialty === "all" || 
-      vendor.specialties.includes(filterSpecialty);
+      (vendor.specialties || []).includes(filterSpecialty);
     
     const matchesStatus = filterStatus === "all" || 
       (filterStatus === "active" && vendor.isActive) ||
@@ -94,17 +161,19 @@ export default function VendorsPage() {
     return matchesSearch && matchesSpecialty && matchesStatus;
   });
 
-  const getPerformanceColor = (rate: number) => {
-    if (rate >= 95) return "text-green-600";
-    if (rate >= 85) return "text-yellow-600";
+  const getPerformanceColor = (rate: string | null) => {
+    const numRate = parseFloat(rate || "0");
+    if (numRate >= 95) return "text-green-600";
+    if (numRate >= 85) return "text-yellow-600";
     return "text-red-600";
   };
 
-  const getRatingStars = (rating: number) => {
+  const getRatingStars = (rating: string | null) => {
+    const numRating = parseFloat(rating || "0");
     return Array.from({ length: 5 }, (_, i) => (
       <IconStar 
         key={i} 
-        className={`h-3 w-3 ${i < Math.floor(rating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} 
+        className={`h-3 w-3 ${i < Math.floor(numRating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} 
       />
     ));
   };
@@ -133,13 +202,15 @@ export default function VendorsPage() {
                   {vendor.companyName}
                 </h3>
                 <p className="text-sm text-muted-foreground">{vendor.contactName}</p>
-                <div className="flex items-center gap-1">
-                  {getRatingStars(vendor.rating)}
-                  <span className="text-sm font-medium ml-1">{vendor.rating}</span>
-                  <span className="text-xs text-muted-foreground">
-                    ({vendor.completedJobs} jobs)
-                  </span>
-                </div>
+                {vendor.rating && (
+                  <div className="flex items-center gap-1">
+                    {getRatingStars(vendor.rating)}
+                    <span className="text-sm font-medium ml-1">{parseFloat(vendor.rating).toFixed(1)}</span>
+                    <span className="text-xs text-muted-foreground">
+                      ({vendor.completedJobs} jobs)
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -165,6 +236,13 @@ export default function VendorsPage() {
                     <IconFileText className="mr-2 h-4 w-4" />
                     View History
                   </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-red-600"
+                    onClick={() => handleDelete(vendor.id)}
+                  >
+                    <IconTrash className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -187,35 +265,43 @@ export default function VendorsPage() {
           </div>
 
           {/* Specialties */}
-          <div className="space-y-2">
-            <div className="flex items-center text-sm font-medium">
-              <IconTool className="mr-2 h-3 w-3" />
-              Specialties
+          {vendor.specialties && vendor.specialties.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center text-sm font-medium">
+                <IconTool className="mr-2 h-3 w-3" />
+                Specialties
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {vendor.specialties.map((specialty, index) => (
+                  <Badge key={index} variant="outline" className="text-xs">
+                    {specialty}
+                  </Badge>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1">
-              {vendor.specialties.map((specialty, index) => (
-                <Badge key={index} variant="outline" className="text-xs">
-                  {specialty}
-                </Badge>
-              ))}
-            </div>
-          </div>
+          )}
 
           {/* Performance Metrics */}
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-            <div className="space-y-1">
-              <div className="text-xs text-muted-foreground">On-Time Rate</div>
-              <div className={`text-sm font-semibold ${getPerformanceColor(vendor.onTimeRate)}`}>
-                {vendor.onTimeRate}%
-              </div>
+          {(vendor.onTimeRate || vendor.averageCost) && (
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+              {vendor.onTimeRate && (
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">On-Time Rate</div>
+                  <div className={`text-sm font-semibold ${getPerformanceColor(vendor.onTimeRate)}`}>
+                    {vendor.onTimeRate}%
+                  </div>
+                </div>
+              )}
+              {vendor.averageCost && (
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">Avg Cost</div>
+                  <div className="text-sm font-semibold">
+                    {formatCurrency(parseFloat(vendor.averageCost))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="space-y-1">
-              <div className="text-xs text-muted-foreground">Avg Cost</div>
-              <div className="text-sm font-semibold">
-                {formatCurrency(vendor.averageCost)}
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* Insurance Status */}
           {isInsuranceExpiring(vendor.insuranceExpiry) && (
@@ -230,6 +316,26 @@ export default function VendorsPage() {
       </CardContent>
     </Card>
   );
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <IconLoader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="text-center text-red-600 p-8">
+          Error: {error}
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -256,9 +362,9 @@ export default function VendorsPage() {
               <IconUsers className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockVendors.length}</div>
+              <div className="text-2xl font-bold">{vendors.length}</div>
               <p className="text-xs text-muted-foreground">
-                {mockVendors.filter(v => v.isActive).length} active
+                {vendors.filter(v => v.isActive).length} active
               </p>
             </CardContent>
           </Card>
@@ -270,7 +376,9 @@ export default function VendorsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {(mockVendors.reduce((sum, v) => sum + v.rating, 0) / mockVendors.length).toFixed(1)}
+                {vendors.length > 0 ? 
+                  (vendors.reduce((sum, v) => sum + parseFloat(v.rating || "0"), 0) / vendors.length).toFixed(1) : 
+                  "0.0"}
               </div>
               <p className="text-xs text-muted-foreground">
                 Across all vendors
@@ -285,10 +393,12 @@ export default function VendorsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {Math.round(mockVendors.reduce((sum, v) => sum + v.onTimeRate, 0) / mockVendors.length)}%
+                {vendors.length > 0 ? 
+                  Math.round(vendors.reduce((sum, v) => sum + parseFloat(v.onTimeRate || "0"), 0) / vendors.length) : 
+                  0}%
               </div>
               <p className="text-xs text-muted-foreground">
-                <span className="text-green-600">↑ 2%</span> from last month
+                Performance average
               </p>
             </CardContent>
           </Card>
@@ -300,9 +410,11 @@ export default function VendorsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatCurrency(
-                  mockVendors.reduce((sum, v) => sum + v.averageCost, 0) / mockVendors.length
-                )}
+                {vendors.length > 0 ? 
+                  formatCurrency(
+                    vendors.reduce((sum, v) => sum + parseFloat(v.averageCost || "0"), 0) / vendors.length
+                  ) : 
+                  "$0"}
               </div>
               <p className="text-xs text-muted-foreground">
                 Per job average
@@ -413,12 +525,12 @@ export default function VendorsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {vendor.specialties.slice(0, 2).map((specialty, index) => (
+                            {(vendor.specialties || []).slice(0, 2).map((specialty, index) => (
                               <Badge key={index} variant="outline" className="text-xs">
                                 {specialty}
                               </Badge>
                             ))}
-                            {vendor.specialties.length > 2 && (
+                            {(vendor.specialties || []).length > 2 && (
                               <Badge variant="outline" className="text-xs">
                                 +{vendor.specialties.length - 2}
                               </Badge>
@@ -426,24 +538,32 @@ export default function VendorsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <div className="flex">
-                              {getRatingStars(vendor.rating)}
+                          {vendor.rating ? (
+                            <div>
+                              <div className="flex items-center gap-1">
+                                <div className="flex">
+                                  {getRatingStars(vendor.rating)}
+                                </div>
+                                <span className="text-sm font-medium ml-1">{parseFloat(vendor.rating).toFixed(1)}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {vendor.completedJobs} jobs
+                              </div>
                             </div>
-                            <span className="text-sm font-medium ml-1">{vendor.rating}</span>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {vendor.completedJobs} jobs
-                          </div>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">No rating</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            <div className="text-sm">
-                              <span className="text-muted-foreground">On-time: </span>
-                              <span className={getPerformanceColor(vendor.onTimeRate)}>
-                                {vendor.onTimeRate}%
-                              </span>
-                            </div>
+                            {vendor.onTimeRate && (
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">On-time: </span>
+                                <span className={getPerformanceColor(vendor.onTimeRate)}>
+                                  {vendor.onTimeRate}%
+                                </span>
+                              </div>
+                            )}
                             <div className="text-xs text-muted-foreground">
                               Last job: {vendor.lastJobDate ? formatDate(vendor.lastJobDate) : 'N/A'}
                             </div>
@@ -463,7 +583,7 @@ export default function VendorsPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(vendor.averageCost)}
+                          {vendor.averageCost ? formatCurrency(parseFloat(vendor.averageCost)) : '-'}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
@@ -484,6 +604,13 @@ export default function VendorsPage() {
                               <DropdownMenuItem>
                                 <IconFileText className="mr-2 h-4 w-4" />
                                 View History
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-red-600"
+                                onClick={() => handleDelete(vendor.id)}
+                              >
+                                <IconTrash className="mr-2 h-4 w-4" />
+                                Delete
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
