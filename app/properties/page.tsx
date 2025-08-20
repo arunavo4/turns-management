@@ -56,7 +56,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/lib/mock-data";
-import AddPropertyModal from "@/components/properties/add-property-modal";
+import { useRouter } from "next/navigation";
 
 interface Property {
   id: string;
@@ -88,6 +88,7 @@ interface Property {
 }
 
 export default function PropertiesPage() {
+  const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +211,13 @@ export default function PropertiesPage() {
               Manage your property portfolio
             </p>
           </div>
-          <AddPropertyModal onPropertyAdded={fetchProperties} />
+          <Button 
+            className="flex items-center gap-2"
+            onClick={() => router.push("/properties/new")}
+          >
+            <IconPlus className="h-4 w-4" />
+            Add Property
+          </Button>
         </div>
 
         {/* Filters and View Toggle */}

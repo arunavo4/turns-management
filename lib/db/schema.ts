@@ -110,6 +110,9 @@ export const properties = pgTable('properties', {
   owner: varchar('owner', { length: 255 }), // Property owner
   propertyManagerId: text('property_manager_id').references(() => users.id),
   seniorPropertyManagerId: text('senior_property_manager_id').references(() => users.id),
+  renovationTechnicianId: uuid('renovation_technician_id').references(() => users.id),
+  propertyUpdatorId: uuid('property_updator_id').references(() => users.id),
+  statusYardi: varchar('status_yardi', { length: 100 }), // Yardi system status
   isCore: boolean('is_core').default(true),
   inDisposition: boolean('in_disposition').default(false), // Property disposal status
   section8: boolean('section_8').default(false), // Section 8 eligibility
