@@ -203,7 +203,7 @@ export default function VendorsPage() {
       className="group hover:shadow-md transition-shadow duration-200"
       onMouseEnter={() => handleMouseEnter(vendor.id)}
     >
-      <CardContent className="p-6">
+      <CardContent className="px-6">
         <div className="space-y-4">
           {/* Header */}
           <div className="flex items-start justify-between">
