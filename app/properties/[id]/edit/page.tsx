@@ -145,17 +145,38 @@ export default function EditPropertyPage() {
     }
   }, [property]);
 
-  // Update mutation
+  // Update mutation with optimistic update
   const updateMutation = useMutation({
     mutationFn: (data: any) => updateProperty({ ...data, id: propertyId }),
+    onMutate: async (newData) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: propertyKeys.detail(propertyId) });
+      
+      // Snapshot previous value
+      const previousProperty = queryClient.getQueryData(propertyKeys.detail(propertyId));
+      
+      // Optimistically update
+      queryClient.setQueryData(propertyKeys.detail(propertyId), (old: any) => ({
+        ...old,
+        ...newData,
+      }));
+      
+      return { previousProperty };
+    },
     onSuccess: () => {
-      // Invalidate queries and redirect
-      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
       toast.success("Property updated successfully");
       router.push(`/properties/${propertyId}`);
     },
-    onError: (error) => {
+    onError: (error, _, context) => {
+      // Rollback on error
+      if (context?.previousProperty) {
+        queryClient.setQueryData(propertyKeys.detail(propertyId), context.previousProperty);
+      }
       toast.error(error instanceof Error ? error.message : "Failed to update property");
+    },
+    onSettled: () => {
+      // Always refetch after error or success
+      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
     },
   });
 

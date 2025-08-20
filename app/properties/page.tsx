@@ -58,7 +58,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/lib/mock-data";
 import { useRouter } from "next/navigation";
-import { fetchProperties, deleteProperty, propertyKeys, type Property } from "@/lib/api/properties";
+import { fetchProperties, fetchProperty, deleteProperty, propertyKeys, type Property } from "@/lib/api/properties";
 import { toast } from "sonner";
 
 
@@ -76,30 +76,71 @@ export default function PropertiesPage() {
     queryFn: fetchProperties,
   });
 
-  const handleViewDetails = (id: string) => {
+  const handleViewDetails = async (id: string) => {
+    // Prefetch property details before navigation
+    await queryClient.prefetchQuery({
+      queryKey: propertyKeys.detail(id),
+      queryFn: () => fetchProperty(id),
+      staleTime: 10 * 1000, // Consider fresh for 10 seconds
+    });
     router.push(`/properties/${id}`);
   };
 
-  const handleEdit = (id: string) => {
+  const handleEdit = async (id: string) => {
+    // Prefetch property details before navigation
+    await queryClient.prefetchQuery({
+      queryKey: propertyKeys.detail(id),
+      queryFn: () => fetchProperty(id),
+      staleTime: 10 * 1000, // Consider fresh for 10 seconds
+    });
     router.push(`/properties/${id}/edit`);
   };
 
-  // Delete mutation
+  // Delete mutation with optimistic update
   const deleteMutation = useMutation({
     mutationFn: deleteProperty,
+    onMutate: async (deletedId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: propertyKeys.lists() });
+      
+      // Snapshot previous value
+      const previousProperties = queryClient.getQueryData<Property[]>(propertyKeys.lists());
+      
+      // Optimistically remove from the list
+      queryClient.setQueryData<Property[]>(propertyKeys.lists(), (old) => 
+        old ? old.filter(p => p.id !== deletedId) : []
+      );
+      
+      return { previousProperties };
+    },
     onSuccess: () => {
-      // Invalidate and refetch properties
-      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
       toast.success("Property deleted successfully");
     },
-    onError: (error) => {
+    onError: (error, _, context) => {
+      // Rollback on error
+      if (context?.previousProperties) {
+        queryClient.setQueryData(propertyKeys.lists(), context.previousProperties);
+      }
       toast.error(error instanceof Error ? error.message : "Failed to delete property");
+    },
+    onSettled: () => {
+      // Always refetch after error or success
+      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
     },
   });
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this property?")) return;
     deleteMutation.mutate(id);
+  };
+
+  // Prefetch on hover for instant navigation
+  const handleMouseEnter = (id: string) => {
+    queryClient.prefetchQuery({
+      queryKey: propertyKeys.detail(id),
+      queryFn: () => fetchProperty(id),
+      staleTime: 30 * 1000, // Keep fresh for 30 seconds
+    });
   };
 
   // Filter properties based on search and filters
@@ -258,6 +299,7 @@ export default function PropertiesPage() {
                     ? 'border-l-4 border-l-green-500' 
                     : 'border-l-4 border-l-orange-500'
                 }`}
+                onMouseEnter={() => handleMouseEnter(property.id)}
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
@@ -359,7 +401,10 @@ export default function PropertiesPage() {
               </TableHeader>
               <TableBody>
                 {filteredProperties.map((property) => (
-                  <TableRow key={property.id}>
+                  <TableRow 
+                    key={property.id}
+                    onMouseEnter={() => handleMouseEnter(property.id)}
+                  >
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {getPropertyIcon(property.type)}
