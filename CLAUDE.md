@@ -192,3 +192,4 @@ writeStore.addPendingWrite({ table: 'properties', data })
 3. **Write Operations**: Implement optimistic + queued sync
 4. **Conflict Resolution**: Default to last-write-wins
 5. **Testing**: Test offline scenarios and sync recovery
+- Alwasys use drizzle kit for migrations, never force or do migrations manually

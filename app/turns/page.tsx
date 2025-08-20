@@ -13,6 +13,7 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import EnhancedKanbanBoard from './kanban-board';
+import DashboardLayout from "@/components/layout/dashboard-layout";
 
 interface TurnStage {
   id: string;
@@ -342,9 +343,8 @@ export default function TurnsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Full width container like GitHub Projects */}
-      <div className="px-4 lg:px-6 py-4 space-y-4">
+    <DashboardLayout>
+      <div className="space-y-4">
         {/* Compact Header like GitHub Projects */}
         <div className="flex items-center justify-between bg-white rounded-lg border p-3">
           <div className="flex items-center gap-4">
@@ -368,6 +368,6 @@ export default function TurnsPage() {
           onViewChange={setViewType}
         />
       </div>
-    </div>
+    </DashboardLayout>
   );
 }

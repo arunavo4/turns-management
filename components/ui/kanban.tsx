@@ -84,13 +84,30 @@ export const useKanban = () => {
 
 // Provider
 interface KanbanProviderProps {
-  children: React.ReactNode;
-  data: KanbanData;
+  children: React.ReactNode | ((column: any) => React.ReactNode);
+  data?: KanbanData;
+  columns?: any[];
   onCardMove?: (cardId: string, sourceColumnId: string, destinationColumnId: string) => void;
+  onDataChange?: (data: any[]) => void;
 }
 
-export const KanbanProvider = ({ children, data: initialData, onCardMove }: KanbanProviderProps) => {
-  const [data, setData] = useState<KanbanData>(initialData);
+export const KanbanProvider = ({ children, data: initialData, columns, onCardMove, onDataChange }: KanbanProviderProps) => {
+  const [data, setData] = useState<KanbanData>(initialData || { columns: [] });
+
+  // If children is a function (render prop), render columns
+  if (typeof children === 'function' && columns) {
+    return (
+      <KanbanContext.Provider value={{ data, setData, onCardMove }}>
+        <div className="flex flex-col lg:flex-row bg-white rounded-lg border border-gray-200 overflow-x-auto">
+          {columns.map((column) => (
+            <div key={column.id} className="flex flex-col min-h-96 flex-1 min-w-[280px] border-r border-gray-200 last:border-r-0">
+              {children(column)}
+            </div>
+          ))}
+        </div>
+      </KanbanContext.Provider>
+    );
+  }
 
   return (
     <KanbanContext.Provider value={{ data, setData, onCardMove }}>
@@ -227,7 +244,7 @@ interface KanbanColumnProps {
 
 export const KanbanColumn = ({ column }: KanbanColumnProps) => {
   return (
-    <div className="flex flex-col min-h-96 flex-1 border-r border-gray-200 last:border-r-0">
+    <div className="flex flex-col min-h-96 flex-1 min-w-[280px] border-r border-gray-200 last:border-r-0">
       <div className="bg-gray-50 border-b border-gray-200 px-3 py-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -255,6 +272,23 @@ export const KanbanColumn = ({ column }: KanbanColumnProps) => {
     </div>
   );
 };
+
+// Export additional components for external use
+export const KanbanBoard = ({ children, id }: { children: React.ReactNode; id?: string }) => {
+  return <>{children}</>;
+};
+
+export const KanbanCards = ({ children, id }: { children: React.ReactNode | ((item: any) => React.ReactNode); id?: string }) => {
+  // For now, we'll assume this component doesn't need to iterate over data
+  // It should be handled by the parent component
+  return <>{children}</>;
+};
+
+export const KanbanHeader = ({ children }: { children: React.ReactNode }) => {
+  return <div className="kanban-header">{children}</div>;
+};
+
+export const KanbanCard = Card;
 
 // Main Kanban Component
 export const Kanban = () => {
@@ -377,7 +411,7 @@ export const Kanban = () => {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-col lg:flex-row bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="flex flex-col lg:flex-row bg-white rounded-lg border border-gray-200 overflow-x-auto">
         {data.columns.map((column) => (
           <KanbanColumn key={column.id} column={column} />
         ))}

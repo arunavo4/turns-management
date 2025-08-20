@@ -7,7 +7,7 @@ import {
   KanbanCards,
   KanbanHeader,
   KanbanProvider,
-} from '@/components/ui/shadcn-io/kanban';
+} from '@/components/ui/kanban';
 import {
   IconPlus,
   IconSettings,
@@ -598,7 +598,9 @@ export default function EnhancedKanbanBoard({
                   </div>
                 </KanbanHeader>
                 <KanbanCards id={column.id}>
-                  {(item: typeof kanbanData[number]) => (
+                  {kanbanData
+                    .filter(item => item.column === column.id)
+                    .map((item) => (
                     <KanbanCard
                       key={item.id}
                       id={item.id}
@@ -690,7 +692,7 @@ export default function EnhancedKanbanBoard({
                         )}
                       </div>
                     </KanbanCard>
-                  )}
+                  ))}
                 </KanbanCards>
               </KanbanBoard>
             );
