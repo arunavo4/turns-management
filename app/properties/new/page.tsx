@@ -36,6 +36,7 @@ export default function NewPropertyPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState("basic");
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [formData, setFormData] = useState({
     // Basic Info
     propertyId: "",
@@ -165,6 +166,27 @@ export default function NewPropertyPage() {
     { id: "additional", label: "Additional Info", icon: IconPhoto },
   ];
 
+  const handleNextSection = () => {
+    if (currentSectionIndex < sections.length - 1) {
+      const nextIndex = currentSectionIndex + 1;
+      setCurrentSectionIndex(nextIndex);
+      setActiveSection(sections[nextIndex].id);
+    }
+  };
+
+  const handlePreviousSection = () => {
+    if (currentSectionIndex > 0) {
+      const prevIndex = currentSectionIndex - 1;
+      setCurrentSectionIndex(prevIndex);
+      setActiveSection(sections[prevIndex].id);
+    }
+  };
+
+  const handleSectionClick = (sectionId: string, index: number) => {
+    setActiveSection(sectionId);
+    setCurrentSectionIndex(index);
+  };
+
   return (
     <DashboardLayout>
       <div className="min-h-screen bg-background">
@@ -194,12 +216,12 @@ export default function NewPropertyPage() {
           {/* Sidebar Navigation */}
           <div className="w-72 border-r bg-card/30 min-h-[calc(100vh-88px)]">
             <nav className="p-6 space-y-2">
-              {sections.map((section) => {
+              {sections.map((section, index) => {
                 const Icon = section.icon;
                 return (
                   <button
                     key={section.id}
-                    onClick={() => setActiveSection(section.id)}
+                    onClick={() => handleSectionClick(section.id, index)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all ${
                       activeSection === section.id
                         ? "bg-primary text-primary-foreground shadow-sm"
@@ -450,8 +472,8 @@ export default function NewPropertyPage() {
                           id="bedrooms"
                           type="number"
                           min="0"
-                          value={formData.bedrooms}
-                          onChange={(e) => handleInputChange("bedrooms", parseInt(e.target.value))}
+                          value={formData.bedrooms || 0}
+                          onChange={(e) => handleInputChange("bedrooms", parseInt(e.target.value) || 0)}
                           className="h-11"
                         />
                       </div>
@@ -465,8 +487,8 @@ export default function NewPropertyPage() {
                           type="number"
                           min="0"
                           step="0.5"
-                          value={formData.bathrooms}
-                          onChange={(e) => handleInputChange("bathrooms", parseFloat(e.target.value))}
+                          value={formData.bathrooms || 0}
+                          onChange={(e) => handleInputChange("bathrooms", parseFloat(e.target.value) || 0)}
                           className="h-11"
                         />
                       </div>
@@ -479,8 +501,8 @@ export default function NewPropertyPage() {
                           id="squareFeet"
                           type="number"
                           min="0"
-                          value={formData.squareFeet}
-                          onChange={(e) => handleInputChange("squareFeet", parseInt(e.target.value))}
+                          value={formData.squareFeet || 0}
+                          onChange={(e) => handleInputChange("squareFeet", parseInt(e.target.value) || 0)}
                           className="h-11"
                         />
                       </div>
@@ -493,8 +515,8 @@ export default function NewPropertyPage() {
                           id="monthlyRent"
                           type="number"
                           min="0"
-                          value={formData.monthlyRent}
-                          onChange={(e) => handleInputChange("monthlyRent", parseFloat(e.target.value))}
+                          value={formData.monthlyRent || 0}
+                          onChange={(e) => handleInputChange("monthlyRent", parseFloat(e.target.value) || 0)}
                           className="h-11"
                         />
                       </div>
@@ -890,29 +912,53 @@ export default function NewPropertyPage() {
             <div className="sticky bottom-0 bg-background border-t">
               <div className="px-8 py-6">
                 <div className="flex justify-between items-center max-w-4xl">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => router.push("/properties")}
-                    className="min-w-[120px]"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="lg"
-                    onClick={handleSubmit}
-                    disabled={loading || !formData.name || !formData.address || !formData.city || !formData.state || !formData.zipCode}
-                    className="min-w-[160px]"
-                  >
-                    {loading ? (
-                      <>
-                        <IconLoader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      "Create Property"
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => router.push("/properties")}
+                      className="min-w-[120px]"
+                    >
+                      Cancel
+                    </Button>
+                    {currentSectionIndex > 0 && (
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        onClick={handlePreviousSection}
+                        className="min-w-[120px]"
+                      >
+                        Previous
+                      </Button>
                     )}
-                  </Button>
+                  </div>
+                  <div className="flex gap-3">
+                    {currentSectionIndex < sections.length - 1 ? (
+                      <Button
+                        size="lg"
+                        onClick={handleNextSection}
+                        className="min-w-[120px]"
+                      >
+                        Next
+                      </Button>
+                    ) : (
+                      <Button
+                        size="lg"
+                        onClick={handleSubmit}
+                        disabled={loading || !formData.name || !formData.address || !formData.city || !formData.state || !formData.zipCode}
+                        className="min-w-[160px]"
+                      >
+                        {loading ? (
+                          <>
+                            <IconLoader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          "Create Property"
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
