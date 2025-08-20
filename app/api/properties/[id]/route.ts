@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { properties } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { auditService } from "@/lib/audit-service";
 
 // GET - Get single property
 export async function GET(
@@ -56,6 +57,20 @@ export async function PUT(
     const body = await request.json();
     const { id } = await params;
     
+    // Get current property data for audit log
+    const currentProperty = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.id, id))
+      .limit(1);
+    
+    if (currentProperty.length === 0) {
+      return NextResponse.json(
+        { error: "Property not found" },
+        { status: 404 }
+      );
+    }
+    
     const updatedProperty = await db
       .update(properties)
       .set({
@@ -71,6 +86,15 @@ export async function PUT(
         { status: 404 }
       );
     }
+
+    // Log the update in audit log
+    await auditService.logUpdate(
+      'properties',
+      id,
+      currentProperty[0],
+      updatedProperty[0],
+      'Property updated via API'
+    );
 
     return NextResponse.json(updatedProperty[0]);
   } catch (error) {
@@ -96,17 +120,33 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    const deletedProperty = await db
-      .delete(properties)
+    
+    // Get property data before deletion for audit log
+    const propertyToDelete = await db
+      .select()
+      .from(properties)
       .where(eq(properties.id, id))
-      .returning();
-
-    if (deletedProperty.length === 0) {
+      .limit(1);
+    
+    if (propertyToDelete.length === 0) {
       return NextResponse.json(
         { error: "Property not found" },
         { status: 404 }
       );
     }
+    
+    const deletedProperty = await db
+      .delete(properties)
+      .where(eq(properties.id, id))
+      .returning();
+
+    // Log the deletion in audit log
+    await auditService.logDelete(
+      'properties',
+      id,
+      propertyToDelete[0],
+      'Property deleted via API'
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -50,6 +50,18 @@ export const propertyTypeEnum = pgEnum('property_type', [
   'commercial'
 ]);
 
+export const auditActionEnum = pgEnum('audit_action', [
+  'CREATE',
+  'UPDATE',
+  'DELETE',
+  'VIEW',
+  'EXPORT',
+  'APPROVE',
+  'REJECT',
+  'ASSIGN',
+  'COMPLETE'
+]);
+
 // Base columns for all tables
 const baseColumns = {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -130,6 +142,121 @@ export const properties = pgTable('properties', {
   images: jsonb('images').default([]), // Array of image URLs
   notes: text('notes'),
   color: integer('color').default(7) // Color coding for UI (7=green for core, 11=orange for non-core)
+});
+
+// Audit Logs table for enterprise tracking
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  
+  // What was changed
+  tableName: varchar('table_name', { length: 100 }).notNull(),
+  recordId: uuid('record_id').notNull(),
+  action: auditActionEnum('action').notNull(),
+  
+  // Who made the change
+  userId: uuid('user_id').notNull().references(() => users.id),
+  userEmail: varchar('user_email', { length: 255 }).notNull(),
+  userRole: userRoleEnum('user_role'),
+  
+  // What changed
+  oldValues: jsonb('old_values'),
+  newValues: jsonb('new_values'),
+  changedFields: jsonb('changed_fields'),
+  
+  // Related records
+  propertyId: uuid('property_id').references(() => properties.id),
+  turnId: uuid('turn_id'),
+  vendorId: uuid('vendor_id').references(() => vendors.id),
+  
+  // Context
+  context: varchar('context', { length: 255 }),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  userAgent: text('user_agent'),
+  
+  // Metadata
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+});
+
+// Lock Box History table for property security tracking
+export const lockBoxHistory = pgTable('lock_box_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  turnId: uuid('turn_id'),
+  
+  lockBoxInstallDate: timestamp('lock_box_install_date'),
+  lockBoxLocation: varchar('lock_box_location', { length: 255 }),
+  oldLockBoxCode: varchar('old_lock_box_code', { length: 50 }),
+  newLockBoxCode: varchar('new_lock_box_code', { length: 50 }),
+  changeDate: timestamp('change_date').defaultNow(),
+  changedBy: uuid('changed_by').references(() => users.id),
+  reason: text('reason'),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// Utility Providers table
+export const utilityProviders = pgTable('utility_providers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // 'power', 'water', 'gas', 'sewer', 'trash'
+  contactPhone: varchar('contact_phone', { length: 20 }),
+  contactEmail: varchar('contact_email', { length: 255 }),
+  website: varchar('website', { length: 500 }),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+});
+
+// Property Utilities table for detailed utility tracking
+export const propertyUtilities = pgTable('property_utilities', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  
+  // Utility flags
+  wellWaterAvailable: boolean('well_water_available').default(false),
+  septicTankAvailable: boolean('septic_tank_available').default(false),
+  gasNotAvailable: boolean('gas_not_available').default(false),
+  powerNotAvailable: boolean('power_not_available').default(false),
+  trashNotAvailable: boolean('trash_not_available').default(false),
+  
+  // Water
+  waterProviderId: uuid('water_provider_id').references(() => utilityProviders.id),
+  waterAccountNumber: varchar('water_account_number', { length: 100 }),
+  waterWithResident: boolean('water_with_resident').default(false),
+  waterDeposit: decimal('water_deposit', { precision: 10, scale: 2 }),
+  
+  // Gas
+  gasProviderId: uuid('gas_provider_id').references(() => utilityProviders.id),
+  gasAccountNumber: varchar('gas_account_number', { length: 100 }),
+  gasWithResident: boolean('gas_with_resident').default(false),
+  gasDeposit: decimal('gas_deposit', { precision: 10, scale: 2 }),
+  
+  // Sewer
+  sewerInfoSameAsWater: boolean('sewer_info_same_as_water').default(false),
+  sewerProviderId: uuid('sewer_provider_id').references(() => utilityProviders.id),
+  sewerAccountNumber: varchar('sewer_account_number', { length: 100 }),
+  sewerWithResident: boolean('sewer_with_resident').default(false),
+  sewerDeposit: decimal('sewer_deposit', { precision: 10, scale: 2 }),
+  
+  // Power
+  powerProviderId: uuid('power_provider_id').references(() => utilityProviders.id),
+  powerAccountNumber: varchar('power_account_number', { length: 100 }),
+  powerWithResident: boolean('power_with_resident').default(false),
+  powerDeposit: decimal('power_deposit', { precision: 10, scale: 2 }),
+  
+  // Trash
+  trashProviderId: uuid('trash_provider_id').references(() => utilityProviders.id),
+  trashAccountNumber: varchar('trash_account_number', { length: 100 }),
+  trashWithResident: boolean('trash_with_resident').default(false),
+  trashDeposit: decimal('trash_deposit', { precision: 10, scale: 2 }),
+  
+  // Metadata
+  occupancyStatus: varchar('occupancy_status', { length: 50 }),
+  ownedBy: varchar('owned_by', { length: 255 }),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
 });
 
 // Vendors table

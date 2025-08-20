@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { properties } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { auditService } from "@/lib/audit-service";
 
 // GET - List all properties
 export async function GET(request: NextRequest) {
@@ -82,6 +83,14 @@ export async function POST(request: NextRequest) {
       notes: body.notes,
       color: body.color || (body.isCore ? 7 : 11),
     }).returning();
+    
+    // Log the creation in audit log
+    await auditService.logCreate(
+      'properties',
+      newProperty[0].id,
+      newProperty[0],
+      'Property created via API'
+    );
     
     return NextResponse.json(newProperty[0], { status: 201 });
   } catch (error) {
