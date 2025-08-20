@@ -118,6 +118,14 @@ export default function PropertiesPage() {
     }
   };
 
+  const handleViewDetails = (id: string) => {
+    router.push(`/properties/${id}`);
+  };
+
+  const handleEdit = (id: string) => {
+    router.push(`/properties/${id}/edit`);
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this property?")) return;
 
@@ -309,11 +317,11 @@ export default function PropertiesPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleViewDetails(property.id)}>
                           <IconEye className="mr-2 h-4 w-4" />
                           View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEdit(property.id)}>
                           <IconEdit className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
@@ -427,11 +435,11 @@ export default function PropertiesPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewDetails(property.id)}>
                             <IconEye className="mr-2 h-4 w-4" />
                             View
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEdit(property.id)}>
                             <IconEdit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
