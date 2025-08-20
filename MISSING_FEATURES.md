@@ -50,22 +50,56 @@ This document tracks features that exist in the old Odoo platform (`/decyphr_tur
 
 ### 2. Email Notification System (Resend) ❌
 **Priority: CRITICAL**
-- [ ] **Setup Resend integration** (email service provider)
-- [ ] Email template management with Resend
-- [ ] Automated status change notifications
-- [ ] Assignment notifications to vendors
-- [ ] Approval request emails (DFO/HO)
-- [ ] Turn completion notifications
-- [ ] Email logs table
+- [ ] **Install Resend SDK**: `npm install resend`
+- [ ] **Setup API key**: Add `RESEND_API_KEY` to `.env.local`
+- [ ] **Create email service**: `/lib/email/resend-service.ts`
+- [ ] **Email templates** with React components:
+  - [ ] Turn created notification
+  - [ ] Turn assigned to vendor
+  - [ ] Approval request (DFO/HO)
+  - [ ] Approval granted/rejected
+  - [ ] Turn status change
+  - [ ] Turn completed
+  - [ ] Vendor assignment notification
+  - [ ] Property update notification
+- [ ] **API routes for email**:
+  - [ ] `/app/api/email/send/route.ts`
+  - [ ] `/app/api/email/batch/route.ts`
+- [ ] Email logs table (track sent emails)
 - [ ] Email activity tracking
-- [ ] Configurable notification preferences
+- [ ] Configurable notification preferences per user
 - [ ] Batch email functionality
-- [ ] Email templates with React Email
+
+**Implementation Guide:**
+```typescript
+// /lib/email/resend-service.ts
+import { Resend } from 'resend';
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// /components/emails/turn-approval.tsx
+export function TurnApprovalEmail({ 
+  turnNumber, 
+  propertyName, 
+  amount, 
+  approverName 
+}) {
+  // React Email template
+}
+
+// Send email in API route
+await resend.emails.send({
+  from: 'Turns Management <noreply@company.com>',
+  to: [approverEmail],
+  subject: `Approval Required: ${turnNumber}`,
+  react: TurnApprovalEmail({ ... }),
+});
+```
 
 **Tech Stack:**
 - **Email Service**: Resend (https://resend.com)
-- **Templates**: React Email for component-based templates
+- **Templates**: React Email components
 - **Tracking**: Store email logs in database
+- **Domain**: Verify domain in Resend dashboard
 
 **Odoo Implementation Reference:**
 - File: `data/mail_template_data.xml`
@@ -128,9 +162,37 @@ This document tracks features that exist in the old Odoo platform (`/decyphr_tur
 - Vendors and Turns APIs don't have audit logging yet
 
 **Required Integration:**
-1. Each property detail page should show its audit history
-2. Admin should see all changes across all properties
-3. Users should see changes on properties they manage
+1. **Property Detail Page** (`/app/properties/[id]/page.tsx`):
+   - Add `AuditLogViewer` component to show property change history
+   - Show who changed what and when
+   - Display old vs new values for each change
+   - Filter by date range and action type
+   
+2. **Vendor Detail Page** (`/app/vendors/[id]/page.tsx`):
+   - Add audit history tab showing vendor changes
+   - Track approval status changes
+   - Show performance metric updates
+   
+3. **Turn Detail Page** (when created):
+   - Show complete turn lifecycle history
+   - Track status transitions
+   - Show approval workflow history
+   - Display cost changes and reasons
+
+4. **Central Audit Logs Page** (`/app/audit-logs/page.tsx`):
+   - Admin: View all changes across entire system
+   - Users: View changes on entities they manage
+   - Export functionality for compliance
+   - Advanced filtering and search
+
+**Example Integration:**
+```tsx
+// In property detail page
+import AuditLogViewer from "@/components/properties/audit-log-viewer";
+
+// Add in the component grid
+<AuditLogViewer propertyId={propertyId} limit={10} />
+```
 
 ---
 
