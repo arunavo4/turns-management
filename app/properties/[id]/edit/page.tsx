@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,12 +33,13 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
+import { fetchProperty, updateProperty, propertyKeys } from "@/lib/api/properties";
 
 export default function EditPropertyPage() {
   const router = useRouter();
   const params = useParams();
-  const [loading, setLoading] = useState(false);
-  const [fetchingProperty, setFetchingProperty] = useState(true);
+  const queryClient = useQueryClient();
+  const propertyId = params.id as string;
   const [activeSection, setActiveSection] = useState("basic");
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [formData, setFormData] = useState({
@@ -94,62 +97,67 @@ export default function EditPropertyPage() {
     images: [] as File[],
   });
 
-  useEffect(() => {
-    fetchProperty();
-  }, [params.id]);
+  // Fetch property using React Query
+  const { data: property, isLoading: fetchingProperty, error } = useQuery({
+    queryKey: propertyKeys.detail(propertyId),
+    queryFn: () => fetchProperty(propertyId),
+    enabled: !!propertyId,
+  });
 
-  const fetchProperty = async () => {
-    try {
-      const response = await fetch(`/api/properties/${params.id}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch property");
-      }
-      const data = await response.json();
-      
-      // Map the data to form fields
+  // Set form data when property is fetched
+  useEffect(() => {
+    if (property) {
       setFormData({
-        propertyId: data.propertyId || "",
-        name: data.name || "",
-        propertyType: data.type || "single_family",
-        owner: data.owner || "",
-        yearBuilt: data.yearBuilt || new Date().getFullYear(),
-        address: data.address || "",
-        city: data.city || "",
-        state: data.state || "",
-        zipCode: data.zipCode || "",
-        county: data.county || "",
+        propertyId: property.propertyId || "",
+        name: property.name || "",
+        propertyType: property.type || "single_family",
+        owner: property.owner || "",
+        yearBuilt: property.yearBuilt || new Date().getFullYear(),
+        address: property.address || "",
+        city: property.city || "",
+        state: property.state || "",
+        zipCode: property.zipCode || "",
+        county: property.county || "",
         country: "United States",
-        market: data.market || "",
-        bedrooms: data.bedrooms || 1,
-        bathrooms: data.bathrooms || 1,
-        squareFeet: data.squareFeet || 0,
-        monthlyRent: data.monthlyRent || 0,
-        status: data.status || "active",
-        statusYardi: data.statusYardi || "",
-        isCore: data.isCore !== undefined ? data.isCore : true,
-        inDisposition: data.inDisposition || false,
-        section8: data.section8 || false,
-        insurance: data.insurance !== undefined ? data.insurance : true,
-        squatters: data.squatters || false,
-        ownership: data.ownership !== undefined ? data.ownership : true,
-        utilities: data.utilities || { power: false, water: false, gas: false },
-        moveInDate: data.moveInDate ? new Date(data.moveInDate).toISOString().split('T')[0] : "",
-        moveOutDate: data.moveOutDate ? new Date(data.moveOutDate).toISOString().split('T')[0] : "",
-        propertyManagerId: data.propertyManagerId || "",
-        seniorPropertyManagerId: data.seniorPropertyManagerId || "",
-        renovationTechnicianId: data.renovationTechnicianId || "",
-        propertyUpdatorId: data.propertyUpdatorId || "",
-        notes: data.notes || "",
+        market: property.market || "",
+        bedrooms: property.bedrooms || 1,
+        bathrooms: property.bathrooms || 1,
+        squareFeet: property.squareFeet || 0,
+        monthlyRent: property.monthlyRent || 0,
+        status: property.status || "active",
+        statusYardi: property.statusYardi || "",
+        isCore: property.isCore !== undefined ? property.isCore : true,
+        inDisposition: property.inDisposition || false,
+        section8: property.section8 || false,
+        insurance: property.insurance !== undefined ? property.insurance : true,
+        squatters: property.squatters || false,
+        ownership: property.ownership !== undefined ? property.ownership : true,
+        utilities: property.utilities || { power: false, water: false, gas: false },
+        moveInDate: property.moveInDate ? new Date(property.moveInDate).toISOString().split('T')[0] : "",
+        moveOutDate: property.moveOutDate ? new Date(property.moveOutDate).toISOString().split('T')[0] : "",
+        propertyManagerId: property.propertyManagerId || "",
+        seniorPropertyManagerId: property.seniorPropertyManagerId || "",
+        renovationTechnicianId: property.renovationTechnicianId || "",
+        propertyUpdatorId: property.propertyUpdatorId || "",
+        notes: property.notes || "",
         images: [],
       });
-    } catch (error) {
-      console.error("Error fetching property:", error);
-      alert("Failed to fetch property details");
-      router.push("/properties");
-    } finally {
-      setFetchingProperty(false);
     }
-  };
+  }, [property]);
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => updateProperty({ ...data, id: propertyId }),
+    onSuccess: () => {
+      // Invalidate queries and redirect
+      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      toast.success("Property updated successfully");
+      router.push(`/properties/${propertyId}`);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to update property");
+    },
+  });
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
@@ -185,32 +193,12 @@ export default function EditPropertyPage() {
     }));
   };
 
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/properties/${params.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...formData,
-          type: formData.propertyType,
-          color: formData.isCore ? 7 : 11,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update property");
-      }
-
-      router.push(`/properties/${params.id}`);
-    } catch (error) {
-      console.error("Error updating property:", error);
-      alert("Failed to update property. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+  const handleSubmit = () => {
+    updateMutation.mutate({
+      ...formData,
+      type: formData.propertyType,
+      color: formData.isCore ? 7 : 11,
+    });
   };
 
   const sections = [
@@ -1011,10 +999,10 @@ export default function EditPropertyPage() {
                       <Button
                         size="lg"
                         onClick={handleSubmit}
-                        disabled={loading || !formData.name || !formData.address || !formData.city || !formData.state || !formData.zipCode}
+                        disabled={updateMutation.isPending || !formData.name || !formData.address || !formData.city || !formData.state || !formData.zipCode}
                         className="min-w-[160px]"
                       >
-                        {loading ? (
+                        {updateMutation.isPending ? (
                           <>
                             <IconLoader2 className="h-4 w-4 mr-2 animate-spin" />
                             Updating...

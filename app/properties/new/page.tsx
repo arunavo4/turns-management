@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,10 +33,11 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
+import { createProperty, propertyKeys } from "@/lib/api/properties";
 
 export default function NewPropertyPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState("basic");
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [formData, setFormData] = useState({
@@ -126,35 +129,28 @@ export default function NewPropertyPage() {
     }));
   };
 
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      const propertyId = formData.propertyId || `PROP-${Date.now()}`;
-      
-      const response = await fetch("/api/properties", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...formData,
-          propertyId,
-          propertyType: formData.propertyType,
-          color: formData.isCore ? 7 : 11,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create property");
-      }
-
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: createProperty,
+    onSuccess: () => {
+      // Invalidate queries and redirect
+      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      toast.success("Property created successfully");
       router.push("/properties");
-    } catch (error) {
-      console.error("Error creating property:", error);
-      alert("Failed to create property. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to create property");
+    },
+  });
+
+  const handleSubmit = () => {
+    const propertyId = formData.propertyId || `PROP-${Date.now()}`;
+    createMutation.mutate({
+      ...formData,
+      propertyId,
+      type: formData.propertyType,
+      color: formData.isCore ? 7 : 11,
+    });
   };
 
   const sections = [
@@ -945,10 +941,10 @@ export default function NewPropertyPage() {
                       <Button
                         size="lg"
                         onClick={handleSubmit}
-                        disabled={loading || !formData.name || !formData.address || !formData.city || !formData.state || !formData.zipCode}
+                        disabled={createMutation.isPending || !formData.name || !formData.address || !formData.city || !formData.state || !formData.zipCode}
                         className="min-w-[160px]"
                       >
-                        {loading ? (
+                        {createMutation.isPending ? (
                           <>
                             <IconLoader2 className="h-4 w-4 mr-2 animate-spin" />
                             Creating...

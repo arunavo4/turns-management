@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,90 +27,40 @@ import {
   IconLoader2,
 } from "@tabler/icons-react";
 import { formatCurrency } from "@/lib/mock-data";
+import { fetchProperty, deleteProperty, propertyKeys } from "@/lib/api/properties";
+import { toast } from "sonner";
 
-interface Property {
-  id: string;
-  propertyId?: string;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  county?: string;
-  type: string;
-  status: string;
-  bedrooms: number;
-  bathrooms: number;
-  squareFeet: number;
-  yearBuilt: number;
-  monthlyRent: string;
-  market?: string;
-  owner?: string;
-  propertyManagerId?: string;
-  seniorPropertyManagerId?: string;
-  renovationTechnicianId?: string;
-  propertyUpdatorId?: string;
-  statusYardi?: string;
-  isCore: boolean;
-  inDisposition: boolean;
-  section8: boolean;
-  insurance: boolean;
-  squatters: boolean;
-  ownership: boolean;
-  moveInDate?: string;
-  moveOutDate?: string;
-  utilities?: {
-    power: boolean;
-    water: boolean;
-    gas: boolean;
-  };
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export default function PropertyDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const [property, setProperty] = useState<Property | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const propertyId = params.id as string;
 
-  useEffect(() => {
-    fetchProperty();
-  }, [params.id]);
+  // Fetch property using React Query
+  const { data: property, isLoading, error } = useQuery({
+    queryKey: propertyKeys.detail(propertyId),
+    queryFn: () => fetchProperty(propertyId),
+    enabled: !!propertyId,
+  });
 
-  const fetchProperty = async () => {
-    try {
-      const response = await fetch(`/api/properties/${params.id}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch property");
-      }
-      const data = await response.json();
-      setProperty(data);
-    } catch (error) {
-      console.error("Error fetching property:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: deleteProperty,
+    onSuccess: () => {
+      // Invalidate queries and navigate
+      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      toast.success("Property deleted successfully");
+      router.push("/properties");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to delete property");
+    },
+  });
 
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this property?")) return;
-
-    try {
-      const response = await fetch(`/api/properties/${params.id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete property");
-      }
-
-      router.push("/properties");
-    } catch (error) {
-      console.error("Error deleting property:", error);
-      alert("Failed to delete property. Please try again.");
-    }
+    deleteMutation.mutate(propertyId);
   };
 
   const getStatusColor = (status: string) => {
@@ -132,7 +82,7 @@ export default function PropertyDetailsPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -142,12 +92,14 @@ export default function PropertyDetailsPage() {
     );
   }
 
-  if (!property) {
+  if (error || !property) {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <h2 className="text-2xl font-semibold mb-2">Property Not Found</h2>
-          <p className="text-muted-foreground mb-4">The requested property could not be found.</p>
+          <p className="text-muted-foreground mb-4">
+            {error instanceof Error ? error.message : "The requested property could not be found."}
+          </p>
           <Button onClick={() => router.push("/properties")}>
             Back to Properties
           </Button>
@@ -297,7 +249,7 @@ export default function PropertyDetailsPage() {
                   <IconBath className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm text-muted-foreground">Bathrooms</p>
-                    <p className="font-medium">{property.bathrooms}</p>
+                    <p className="font-medium">{property.bathrooms || 0}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

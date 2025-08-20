@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconSearch,
@@ -57,66 +58,23 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/lib/mock-data";
 import { useRouter } from "next/navigation";
+import { fetchProperties, deleteProperty, propertyKeys, type Property } from "@/lib/api/properties";
+import { toast } from "sonner";
 
-interface Property {
-  id: string;
-  propertyId?: string;
-  name: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  county?: string;
-  type: string;
-  status: string;
-  bedrooms: number;
-  bathrooms: string;
-  squareFeet: number;
-  yearBuilt?: number;
-  monthlyRent: string;
-  market?: string;
-  owner?: string;
-  isCore: boolean;
-  inDisposition?: boolean;
-  section8?: boolean;
-  insurance?: boolean;
-  squatters?: boolean;
-  ownership?: boolean;
-  color?: number;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export default function PropertiesPage() {
   const router = useRouter();
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  // Fetch properties from API
-  useEffect(() => {
-    fetchProperties();
-  }, []);
-
-  const fetchProperties = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/properties");
-      if (!response.ok) {
-        throw new Error("Failed to fetch properties");
-      }
-      const data = await response.json();
-      setProperties(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fetch properties using React Query
+  const { data: properties = [], isLoading, error } = useQuery({
+    queryKey: propertyKeys.lists(),
+    queryFn: fetchProperties,
+  });
 
   const handleViewDetails = (id: string) => {
     router.push(`/properties/${id}`);
@@ -126,23 +84,22 @@ export default function PropertiesPage() {
     router.push(`/properties/${id}/edit`);
   };
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: deleteProperty,
+    onSuccess: () => {
+      // Invalidate and refetch properties
+      queryClient.invalidateQueries({ queryKey: propertyKeys.all });
+      toast.success("Property deleted successfully");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to delete property");
+    },
+  });
+
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this property?")) return;
-
-    try {
-      const response = await fetch(`/api/properties/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete property");
-      }
-
-      // Refresh properties list
-      fetchProperties();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete property");
-    }
+    deleteMutation.mutate(id);
   };
 
   // Filter properties based on search and filters
@@ -188,7 +145,7 @@ export default function PropertiesPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-96">
@@ -202,7 +159,7 @@ export default function PropertiesPage() {
     return (
       <DashboardLayout>
         <div className="text-center text-red-600 p-8">
-          Error: {error}
+          Error: {error instanceof Error ? error.message : "An error occurred"}
         </div>
       </DashboardLayout>
     );
