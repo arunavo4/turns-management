@@ -120,8 +120,8 @@ export const properties = pgTable('properties', {
   monthlyRent: decimal('monthly_rent', { precision: 10, scale: 2 }),
   market: varchar('market', { length: 100 }), // Market area
   owner: varchar('owner', { length: 255 }), // Property owner
-  propertyManagerId: text('property_manager_id').references(() => users.id),
-  seniorPropertyManagerId: text('senior_property_manager_id').references(() => users.id),
+  propertyManagerId: uuid('property_manager_id').references(() => users.id),
+  seniorPropertyManagerId: uuid('senior_property_manager_id').references(() => users.id),
   renovationTechnicianId: uuid('renovation_technician_id').references(() => users.id),
   propertyUpdatorId: uuid('property_updator_id').references(() => users.id),
   statusYardi: varchar('status_yardi', { length: 100 }), // Yardi system status
@@ -325,8 +325,8 @@ export const turns = pgTable('turns', {
   // Approval
   needsDfoApproval: boolean('needs_dfo_approval').default(false),
   needsHoApproval: boolean('needs_ho_approval').default(false),
-  dfoApprovedBy: text('dfo_approved_by').references(() => users.id),
-  hoApprovedBy: text('ho_approved_by').references(() => users.id),
+  dfoApprovedBy: uuid('dfo_approved_by').references(() => users.id),
+  hoApprovedBy: uuid('ho_approved_by').references(() => users.id),
   dfoApprovedAt: timestamp('dfo_approved_at'),
   hoApprovedAt: timestamp('ho_approved_at'),
   rejectionReason: text('rejection_reason'),
@@ -362,7 +362,7 @@ export const turnHistory = pgTable('turn_history', {
   newStatus: turnStatusEnum('new_status'),
   previousStageId: uuid('previous_stage_id'),
   newStageId: uuid('new_stage_id'),
-  changedBy: text('changed_by').references(() => users.id),
+  changedBy: uuid('changed_by').references(() => users.id),
   comment: text('comment'),
   changedData: jsonb('changed_data')
 });
@@ -379,7 +379,7 @@ export const documents = pgTable('documents', {
   url: text('url').notNull(),
   category: varchar('category', { length: 50 }),
   description: text('description'),
-  uploadedBy: text('uploaded_by').references(() => users.id)
+  uploadedBy: uuid('uploaded_by').references(() => users.id)
 });
 
 // Relations
