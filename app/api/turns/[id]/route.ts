@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { turns, turnHistory } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { auditService } from "@/lib/audit-service";
 
 // GET - Get single turn
 export async function GET(
@@ -93,6 +94,21 @@ export async function PATCH(
       });
     }
 
+    // Log the update
+    const changedFields = auditService.calculateChangedFields(currentTurn[0], updatedTurn[0]);
+    await auditService.log({
+      tableName: 'turns',
+      recordId: id,
+      action: 'UPDATE',
+      oldValues: currentTurn[0],
+      newValues: updatedTurn[0],
+      changedFields,
+      turnId: id,
+      propertyId: updatedTurn[0].propertyId,
+      vendorId: updatedTurn[0].vendorId,
+      context: `Updated turn status: ${updatedTurn[0].turnNumber}`,
+    }, request);
+
     return NextResponse.json(updatedTurn[0]);
   } catch (error) {
     console.error("Error updating turn:", error);
@@ -169,6 +185,21 @@ export async function PUT(
       });
     }
 
+    // Log the update
+    const changedFields = auditService.calculateChangedFields(currentTurn[0], updatedTurn[0]);
+    await auditService.log({
+      tableName: 'turns',
+      recordId: id,
+      action: 'UPDATE',
+      oldValues: currentTurn[0],
+      newValues: updatedTurn[0],
+      changedFields,
+      turnId: id,
+      propertyId: updatedTurn[0].propertyId,
+      vendorId: updatedTurn[0].vendorId,
+      context: `Updated turn: ${updatedTurn[0].turnNumber}`,
+    }, request);
+
     return NextResponse.json(updatedTurn[0]);
   } catch (error) {
     console.error("Error updating turn:", error);
@@ -193,17 +224,37 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    const deletedTurn = await db
-      .delete(turns)
+    
+    // Get turn data before deletion for audit log
+    const turnToDelete = await db
+      .select()
+      .from(turns)
       .where(eq(turns.id, id))
-      .returning();
-
-    if (deletedTurn.length === 0) {
+      .limit(1);
+    
+    if (turnToDelete.length === 0) {
       return NextResponse.json(
         { error: "Turn not found" },
         { status: 404 }
       );
     }
+    
+    const deletedTurn = await db
+      .delete(turns)
+      .where(eq(turns.id, id))
+      .returning();
+
+    // Log the deletion
+    await auditService.log({
+      tableName: 'turns',
+      recordId: id,
+      action: 'DELETE',
+      oldValues: turnToDelete[0],
+      turnId: id,
+      propertyId: turnToDelete[0].propertyId,
+      vendorId: turnToDelete[0].vendorId,
+      context: `Deleted turn: ${turnToDelete[0].turnNumber}`,
+    }, request);
 
     return NextResponse.json({ success: true });
   } catch (error) {

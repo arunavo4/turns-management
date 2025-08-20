@@ -20,6 +20,7 @@ import {
   IconUser,
   IconChevronLeft,
   IconChevronRight,
+  IconHistory,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +69,12 @@ const navigation = [
     name: "Reports", 
     href: "/reports", 
     icon: IconChartBar, 
+    badge: null 
+  },
+  { 
+    name: "Audit Logs", 
+    href: "/audit-logs", 
+    icon: IconHistory, 
     badge: null 
   },
   { 

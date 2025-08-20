@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { vendors } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { auditService } from "@/lib/audit-service";
 
 // GET - List all vendors
 export async function GET(request: NextRequest) {
@@ -75,6 +76,16 @@ export async function POST(request: NextRequest) {
         onTimeRate: 0
       },
     }).returning();
+    
+    // Log the creation
+    await auditService.log({
+      tableName: 'vendors',
+      recordId: newVendor[0].id,
+      action: 'CREATE',
+      newValues: newVendor[0],
+      vendorId: newVendor[0].id,
+      context: `Created vendor: ${newVendor[0].companyName}`,
+    }, request);
     
     return NextResponse.json(newVendor[0], { status: 201 });
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { vendors } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { auditService } from "@/lib/audit-service";
 
 // GET - Get single vendor
 export async function GET(
@@ -55,6 +56,20 @@ export async function PUT(
 
     const body = await request.json();
     const { id } = await params;
+    
+    // Get the current vendor for audit logging
+    const currentVendor = await db
+      .select()
+      .from(vendors)
+      .where(eq(vendors.id, id))
+      .limit(1);
+    
+    if (currentVendor.length === 0) {
+      return NextResponse.json(
+        { error: "Vendor not found" },
+        { status: 404 }
+      );
+    }
     
     // Process the data to handle date fields and remove id field
     const { 
@@ -110,6 +125,19 @@ export async function PUT(
       );
     }
 
+    // Log the update
+    const changedFields = auditService.calculateChangedFields(currentVendor[0], updatedVendor[0]);
+    await auditService.log({
+      tableName: 'vendors',
+      recordId: id,
+      action: 'UPDATE',
+      oldValues: currentVendor[0],
+      newValues: updatedVendor[0],
+      changedFields,
+      vendorId: id,
+      context: `Updated vendor: ${updatedVendor[0].companyName}`,
+    }, request);
+
     return NextResponse.json(updatedVendor[0]);
   } catch (error) {
     console.error("Error updating vendor:", error);
@@ -134,17 +162,35 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    const deletedVendor = await db
-      .delete(vendors)
+    
+    // Get vendor data before deletion for audit log
+    const vendorToDelete = await db
+      .select()
+      .from(vendors)
       .where(eq(vendors.id, id))
-      .returning();
-
-    if (deletedVendor.length === 0) {
+      .limit(1);
+    
+    if (vendorToDelete.length === 0) {
       return NextResponse.json(
         { error: "Vendor not found" },
         { status: 404 }
       );
     }
+    
+    const deletedVendor = await db
+      .delete(vendors)
+      .where(eq(vendors.id, id))
+      .returning();
+
+    // Log the deletion
+    await auditService.log({
+      tableName: 'vendors',
+      recordId: id,
+      action: 'DELETE',
+      oldValues: vendorToDelete[0],
+      vendorId: id,
+      context: `Deleted vendor: ${vendorToDelete[0].companyName}`,
+    }, request);
 
     return NextResponse.json({ success: true });
   } catch (error) {

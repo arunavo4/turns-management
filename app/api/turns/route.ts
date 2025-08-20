@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { turns, properties, vendors, turnStages } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { auditService } from "@/lib/audit-service";
 
 // GET - List all turns with related data
 export async function GET() {
@@ -73,6 +74,18 @@ export async function POST(request: NextRequest) {
       appliancesNeeded: body.appliancesNeeded || false,
       notes: body.notes,
     }).returning();
+    
+    // Log the creation
+    await auditService.log({
+      tableName: 'turns',
+      recordId: newTurn[0].id,
+      action: 'CREATE',
+      newValues: newTurn[0],
+      turnId: newTurn[0].id,
+      propertyId: body.propertyId,
+      vendorId: body.vendorId,
+      context: `Created turn: ${turnNumber}`,
+    }, request);
     
     return NextResponse.json(newTurn[0], { status: 201 });
   } catch (error) {

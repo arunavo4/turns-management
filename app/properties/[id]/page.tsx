@@ -29,6 +29,7 @@ import {
 import { formatCurrency } from "@/lib/mock-data";
 import { fetchProperty, deleteProperty, propertyKeys } from "@/lib/api/properties";
 import { toast } from "sonner";
+import AuditLogViewer from "@/components/properties/audit-log-viewer";
 
 
 export default function PropertyDetailsPage() {
@@ -362,6 +363,9 @@ export default function PropertyDetailsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Audit Log */}
+        <AuditLogViewer propertyId={propertyId} limit={10} />
       </div>
     </DashboardLayout>
   );
