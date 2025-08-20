@@ -276,6 +276,12 @@ export const vendors = pgTable('vendors', {
   rating: decimal('rating', { precision: 3, scale: 2 }),
   isApproved: boolean('is_approved').default(false),
   isActive: boolean('is_active').default(true),
+  // Additional fields for compatibility with UI
+  averageCost: decimal('average_cost', { precision: 10, scale: 2 }),
+  completedJobs: integer('completed_jobs').default(0),
+  onTimeRate: decimal('on_time_rate', { precision: 5, scale: 2 }),
+  lastJobDate: timestamp('last_job_date'),
+  notes: text('notes'),
   performanceMetrics: jsonb('performance_metrics').default({
     completedTurns: 0,
     avgCompletionTime: 0,

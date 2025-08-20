@@ -56,12 +56,50 @@ export async function PUT(
     const body = await request.json();
     const { id } = await params;
     
+    // Process the data to handle date fields and remove id field
+    const { 
+      id: _, 
+      insuranceExpiry, 
+      createdAt,
+      updatedAt: __,
+      averageCost,
+      onTimeRate,
+      completedJobs,
+      lastJobDate,
+      ...rest 
+    } = body;
+    
+    const updateData: any = {
+      ...rest,
+      updatedAt: new Date(),
+    };
+    
+    // Convert insuranceExpiry string to Date if provided
+    if (insuranceExpiry) {
+      updateData.insuranceExpiry = new Date(insuranceExpiry);
+    }
+    
+    // Handle numeric fields that might come as strings from the form
+    if (averageCost !== undefined) {
+      updateData.averageCost = averageCost ? String(averageCost) : null;
+    }
+    
+    if (onTimeRate !== undefined) {
+      updateData.onTimeRate = onTimeRate ? String(onTimeRate) : null;
+    }
+    
+    if (completedJobs !== undefined) {
+      updateData.completedJobs = parseInt(completedJobs) || 0;
+    }
+    
+    // Convert lastJobDate string to Date if provided
+    if (lastJobDate) {
+      updateData.lastJobDate = new Date(lastJobDate);
+    }
+    
     const updatedVendor = await db
       .update(vendors)
-      .set({
-        ...body,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(vendors.id, id))
       .returning();
 

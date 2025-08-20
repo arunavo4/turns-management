@@ -8,6 +8,13 @@
       "when": 1755675266926,
       "tag": "0000_lowly_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1755688027874,
+      "tag": "0001_robust_black_knight",
+      "breakpoints": true
     }
   ]
 }
