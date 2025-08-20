@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import DashboardLayout from "@/components/layout/dashboard-layout";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import DashboardLayout from "@/components/layout/dashboard-layout"
 import {
   IconSearch,
   IconPlus,
@@ -64,80 +65,92 @@ import {
   formatCurrency, 
   formatDate
 } from "@/lib/mock-data";
+import { fetchVendors, fetchVendor, deleteVendor, vendorKeys, type Vendor } from "@/lib/api/vendors";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
-interface Vendor {
-  id: string;
-  companyName: string;
-  contactName: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  specialties: string[];
-  insuranceExpiry: string;
-  rating: string | null;
-  isActive: boolean;
-  isApproved: boolean;
-  averageCost: string | null;
-  completedJobs: number;
-  onTimeRate: string | null;
-  lastJobDate: string | null;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
 
 type ViewMode = "grid" | "table";
 
 export default function VendorsPage() {
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSpecialty, setFilterSpecialty] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
-  // Fetch vendors from API
-  useEffect(() => {
-    fetchVendors();
-  }, []);
+  // Fetch vendors using React Query
+  const { data: vendors = [], isLoading, error } = useQuery({
+    queryKey: vendorKeys.lists(),
+    queryFn: fetchVendors,
+  });
 
-  const fetchVendors = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/vendors");
-      if (!response.ok) {
-        throw new Error("Failed to fetch vendors");
+  // Delete mutation with optimistic update
+  const deleteMutation = useMutation({
+    mutationFn: deleteVendor,
+    onMutate: async (deletedId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: vendorKeys.lists() });
+      
+      // Snapshot previous value
+      const previousVendors = queryClient.getQueryData<Vendor[]>(vendorKeys.lists());
+      
+      // Optimistically remove from the list
+      queryClient.setQueryData<Vendor[]>(vendorKeys.lists(), (old) => 
+        old ? old.filter(v => v.id !== deletedId) : []
+      );
+      
+      return { previousVendors };
+    },
+    onSuccess: () => {
+      toast.success("Vendor deleted successfully");
+    },
+    onError: (error, _, context) => {
+      // Rollback on error
+      if (context?.previousVendors) {
+        queryClient.setQueryData(vendorKeys.lists(), context.previousVendors);
       }
-      const data = await response.json();
-      setVendors(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  };
+      toast.error(error instanceof Error ? error.message : "Failed to delete vendor");
+    },
+    onSettled: () => {
+      // Always refetch after error or success
+      queryClient.invalidateQueries({ queryKey: vendorKeys.all });
+    },
+  });
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this vendor?")) return;
+    deleteMutation.mutate(id);
+  };
 
-    try {
-      const response = await fetch(`/api/vendors/${id}`, {
-        method: "DELETE",
-      });
+  // Prefetch on hover for instant navigation
+  const handleMouseEnter = (id: string) => {
+    queryClient.prefetchQuery({
+      queryKey: vendorKeys.detail(id),
+      queryFn: () => fetchVendor(id),
+      staleTime: 30 * 1000, // Keep fresh for 30 seconds
+    });
+  };
 
-      if (!response.ok) {
-        throw new Error("Failed to delete vendor");
-      }
+  const handleViewProfile = async (id: string) => {
+    // Prefetch vendor details before navigation
+    await queryClient.prefetchQuery({
+      queryKey: vendorKeys.detail(id),
+      queryFn: () => fetchVendor(id),
+      staleTime: 10 * 1000, // Consider fresh for 10 seconds
+    });
+    router.push(`/vendors/${id}`);
+  };
 
-      // Refresh vendors list
-      fetchVendors();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete vendor");
-    }
+  const handleEdit = async (id: string) => {
+    // Prefetch vendor details before navigation
+    await queryClient.prefetchQuery({
+      queryKey: vendorKeys.detail(id),
+      queryFn: () => fetchVendor(id),
+      staleTime: 10 * 1000, // Consider fresh for 10 seconds
+    });
+    router.push(`/vendors/${id}/edit`);
   };
 
   // Get all unique specialties
@@ -186,7 +199,10 @@ export default function VendorsPage() {
   };
 
   const VendorCard = ({ vendor }: { vendor: Vendor }) => (
-    <Card className="group hover:shadow-md transition-shadow duration-200">
+    <Card 
+      className="group hover:shadow-md transition-shadow duration-200"
+      onMouseEnter={() => handleMouseEnter(vendor.id)}
+    >
       <CardContent className="p-6">
         <div className="space-y-4">
           {/* Header */}
@@ -224,11 +240,11 @@ export default function VendorsPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleViewProfile(vendor.id)}>
                     <IconEye className="mr-2 h-4 w-4" />
                     View Profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleEdit(vendor.id)}>
                     <IconEdit className="mr-2 h-4 w-4" />
                     Edit Vendor
                   </DropdownMenuItem>
@@ -317,7 +333,7 @@ export default function VendorsPage() {
     </Card>
   );
 
-  if (loading) {
+  if (isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-96">
@@ -331,7 +347,7 @@ export default function VendorsPage() {
     return (
       <DashboardLayout>
         <div className="text-center text-red-600 p-8">
-          Error: {error}
+          Error: {error instanceof Error ? error.message : "An error occurred"}
         </div>
       </DashboardLayout>
     );
@@ -348,7 +364,10 @@ export default function VendorsPage() {
               Manage your vendor network and track performance
             </p>
           </div>
-          <Button className="flex items-center gap-2">
+          <Button 
+            className="flex items-center gap-2"
+            onClick={() => router.push("/vendors/new")}
+          >
             <IconPlus className="h-4 w-4" />
             Add Vendor
           </Button>
@@ -504,7 +523,10 @@ export default function VendorsPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredVendors.map((vendor) => (
-                      <TableRow key={vendor.id}>
+                      <TableRow 
+                        key={vendor.id}
+                        onMouseEnter={() => handleMouseEnter(vendor.id)}
+                      >
                         <TableCell>
                           <div className="flex items-center space-x-3">
                             <Avatar className="h-8 w-8">
@@ -593,11 +615,11 @@ export default function VendorsPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleViewProfile(vendor.id)}>
                                 <IconEye className="mr-2 h-4 w-4" />
                                 View Profile
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEdit(vendor.id)}>
                                 <IconEdit className="mr-2 h-4 w-4" />
                                 Edit Vendor
                               </DropdownMenuItem>
@@ -633,7 +655,7 @@ export default function VendorsPage() {
               <p className="text-muted-foreground mb-4">
                 Try adjusting your search criteria or filters.
               </p>
-              <Button>
+              <Button onClick={() => router.push("/vendors/new")}>
                 <IconPlus className="h-4 w-4 mr-2" />
                 Add New Vendor
               </Button>
