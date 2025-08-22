@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -54,19 +55,24 @@ interface Stats {
   users: number;
 }
 
+// Fetch function for React Query
+const fetchStats = async () => {
+  const response = await fetch('/api/stats');
+  if (!response.ok) throw new Error('Failed to fetch stats');
+  return response.json();
+};
+
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Default to collapsed
-  const [stats, setStats] = useState<Stats | null>(null);
-
-  useEffect(() => {
-    // Fetch statistics on mount
-    fetch('/api/stats')
-      .then(res => res.json())
-      .then(data => setStats(data))
-      .catch(err => console.error('Failed to fetch stats:', err));
-  }, []);
+  
+  const { data: stats } = useQuery<Stats>({
+    queryKey: ['layout-stats'],
+    queryFn: fetchStats,
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 10000, // Consider data stale after 10 seconds
+  });
 
   const navigation = [
     { 

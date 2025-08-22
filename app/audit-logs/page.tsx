@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -59,49 +60,57 @@ interface AuditLog {
   createdAt: string;
 }
 
+// Fetch function for React Query
+const fetchAuditLogs = async ({ 
+  page, 
+  filterTable, 
+  filterUser, 
+  logsPerPage 
+}: { 
+  page: number; 
+  filterTable: string; 
+  filterUser: string; 
+  logsPerPage: number;
+}) => {
+  const params = new URLSearchParams();
+  params.append("limit", logsPerPage.toString());
+  params.append("offset", ((page - 1) * logsPerPage).toString());
+  
+  if (filterTable !== "all") params.append("tableName", filterTable);
+  if (filterUser !== "all") params.append("userId", filterUser);
+
+  const response = await fetch(`/api/audit-logs?${params}`);
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch audit logs");
+  }
+  
+  return response.json();
+};
+
 export default function AuditLogsPage() {
   const { data: session } = useSession();
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterTable, setFilterTable] = useState("all");
   const [filterAction, setFilterAction] = useState("all");
   const [filterUser, setFilterUser] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const logsPerPage = 50;
 
-  useEffect(() => {
-    fetchAuditLogs();
-  }, [currentPage, filterTable, filterAction, filterUser]);
+  const { data: logs = [], isLoading, error, refetch } = useQuery({
+    queryKey: ['audit-logs', currentPage, filterTable, filterUser],
+    queryFn: () => fetchAuditLogs({ 
+      page: currentPage, 
+      filterTable, 
+      filterUser, 
+      logsPerPage 
+    }),
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to fetch audit logs");
+    },
+  });
 
-  const fetchAuditLogs = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      params.append("limit", logsPerPage.toString());
-      params.append("offset", ((currentPage - 1) * logsPerPage).toString());
-      
-      if (filterTable !== "all") params.append("tableName", filterTable);
-      if (filterUser !== "all") params.append("userId", filterUser);
-
-      const response = await fetch(`/api/audit-logs?${params}`);
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch audit logs");
-      }
-      
-      const data = await response.json();
-      setLogs(data);
-      
-      // Simple pagination calculation (would need backend support for total count)
-      setTotalPages(data.length === logsPerPage ? currentPage + 1 : currentPage);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to fetch audit logs");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const totalPages = logs.length === logsPerPage ? currentPage + 1 : currentPage;
 
   const exportToCSV = () => {
     const headers = ["Date", "User", "Role", "Action", "Table", "Record ID", "Changes", "IP Address"];
@@ -165,7 +174,7 @@ export default function AuditLogsPage() {
     }
   };
 
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = (logs || []).filter(log => {
     if (searchTerm && !log.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) &&
         !log.context?.toLowerCase().includes(searchTerm.toLowerCase()) &&
         !log.recordId.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -192,7 +201,7 @@ export default function AuditLogsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={fetchAuditLogs} variant="outline" size="icon">
+            <Button onClick={() => refetch()} variant="outline" size="icon">
               <IconRefresh className="h-4 w-4" />
             </Button>
             <Button onClick={exportToCSV} variant="outline">
@@ -272,7 +281,7 @@ export default function AuditLogsPage() {
             <CardTitle>Activity Log</CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <IconLoader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>

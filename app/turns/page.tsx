@@ -1,23 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   IconSearch,
   IconPlus,
-  IconAlertTriangle,
-  IconCircleCheck,
-  IconRefresh,
-  IconEye,
-  IconLayoutKanban,
-  IconLayoutList,
-  IconTable,
-  IconFilter,
-  IconChevronDown,
   IconX,
   IconBuilding,
   IconCalendar,
   IconCurrencyDollar,
   IconUser,
+  IconRefresh,
 } from "@tabler/icons-react";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -44,7 +37,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { format, formatDistanceToNow, differenceInDays } from "date-fns";
+import { differenceInDays } from "date-fns";
+import { toast } from "sonner";
 
 interface TurnStage {
   id: string;
@@ -122,13 +116,54 @@ interface Vendor {
   phone: string;
 }
 
+// API Functions
+const fetchTurns = async (): Promise<Turn[]> => {
+  const response = await fetch('/api/turns');
+  if (!response.ok) throw new Error('Failed to fetch turns');
+  return response.json();
+};
+
+const fetchStages = async (): Promise<TurnStage[]> => {
+  const response = await fetch('/api/turn-stages');
+  if (!response.ok) throw new Error('Failed to fetch stages');
+  const data = await response.json();
+  return data.sort((a: TurnStage, b: TurnStage) => a.sequence - b.sequence);
+};
+
+const fetchProperties = async (): Promise<Property[]> => {
+  const response = await fetch('/api/properties');
+  if (!response.ok) throw new Error('Failed to fetch properties');
+  return response.json();
+};
+
+const fetchVendors = async (): Promise<Vendor[]> => {
+  const response = await fetch('/api/vendors');
+  if (!response.ok) throw new Error('Failed to fetch vendors');
+  return response.json();
+};
+
+const createTurn = async (turnData: any) => {
+  const response = await fetch('/api/turns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(turnData),
+  });
+  if (!response.ok) throw new Error('Failed to create turn');
+  return response.json();
+};
+
+const updateTurnStage = async ({ turnId, updates }: { turnId: string; updates: any }) => {
+  const response = await fetch(`/api/turns/${turnId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!response.ok) throw new Error('Failed to update turn');
+  return response.json();
+};
+
 export default function TurnsPage() {
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [stages, setStages] = useState<TurnStage[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterStage, setFilterStage] = useState("all");
@@ -148,67 +183,65 @@ export default function TurnsPage() {
     appliancesNeeded: false,
   });
 
-  // Fetch all data on mount
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // React Query hooks
+  const { data: turns = [], isLoading: turnsLoading, error: turnsError } = useQuery({
+    queryKey: ['turns'],
+    queryFn: fetchTurns,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
+  const { data: stages = [], isLoading: stagesLoading } = useQuery({
+    queryKey: ['stages'],
+    queryFn: fetchStages,
+  });
+
+  const { data: properties = [] } = useQuery({
+    queryKey: ['properties'],
+    queryFn: fetchProperties,
+  });
+
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: fetchVendors,
+  });
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: createTurn,
+    onMutate: async (newTurnData) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['turns'] });
       
-      // Fetch all data in parallel
-      const [turnsRes, stagesRes, propertiesRes, vendorsRes] = await Promise.all([
-        fetch('/api/turns'),
-        fetch('/api/turn-stages'),
-        fetch('/api/properties'),
-        fetch('/api/vendors'),
-      ]);
-
-      if (!turnsRes.ok || !stagesRes.ok || !propertiesRes.ok || !vendorsRes.ok) {
-        throw new Error('Failed to fetch data');
-      }
-
-      const [turnsData, stagesData, propertiesData, vendorsData] = await Promise.all([
-        turnsRes.json(),
-        stagesRes.json(),
-        propertiesRes.json(),
-        vendorsRes.json(),
-      ]);
-
-      setTurns(turnsData);
-      setStages(stagesData.sort((a: TurnStage, b: TurnStage) => a.sequence - b.sequence));
-      setProperties(propertiesData);
-      setVendors(vendorsData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateTurn = async () => {
-    try {
-      const response = await fetch('/api/turns', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      // Snapshot the previous value
+      const previousTurns = queryClient.getQueryData(['turns']);
+      
+      // Optimistically update to the new value
+      const optimisticTurn = {
+        turn: {
+          id: `temp-${Date.now()}`,
+          turnNumber: `TURN-${new Date().getFullYear()}-TEMP`,
+          ...newTurnData,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
         },
-        body: JSON.stringify({
-          ...newTurn,
-          vendorId: newTurn.vendorId || null,
-          turnDueDate: newTurn.turnDueDate ? new Date(newTurn.turnDueDate).toISOString() : null,
-          estimatedCost: newTurn.estimatedCost || null,
-          stageId: stages.find(s => s.isDefault)?.id || stages[0]?.id,
-          status: 'draft',
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create turn');
+        property: properties.find(p => p.id === newTurnData.propertyId) || null,
+        vendor: vendors.find(v => v.id === newTurnData.vendorId) || null,
+        stage: stages.find(s => s.id === newTurnData.stageId) || null,
+      };
+      
+      queryClient.setQueryData(['turns'], (old: Turn[] = []) => [...old, optimisticTurn]);
+      
+      return { previousTurns };
+    },
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousTurns) {
+        queryClient.setQueryData(['turns'], context.previousTurns);
       }
-
-      await fetchData();
+      toast.error('Failed to create turn');
+    },
+    onSuccess: () => {
+      toast.success('Turn created successfully');
       setShowCreateDialog(false);
       setNewTurn({
         propertyId: "",
@@ -224,31 +257,68 @@ export default function TurnsPage() {
         trashOutNeeded: false,
         appliancesNeeded: false,
       });
-    } catch (error) {
-      console.error('Failed to create turn:', error);
-    }
+    },
+    onSettled: () => {
+      // Always refetch after error or success
+      queryClient.invalidateQueries({ queryKey: ['turns'] });
+    },
+  });
+
+  const updateStageMutation = useMutation({
+    mutationFn: updateTurnStage,
+    onMutate: async ({ turnId, updates }) => {
+      await queryClient.cancelQueries({ queryKey: ['turns'] });
+      
+      const previousTurns = queryClient.getQueryData(['turns']);
+      
+      // Optimistically update the turn
+      queryClient.setQueryData(['turns'], (old: Turn[] = []) => 
+        old.map(turnData => 
+          turnData.turn.id === turnId 
+            ? { ...turnData, turn: { ...turnData.turn, ...updates } }
+            : turnData
+        )
+      );
+      
+      return { previousTurns };
+    },
+    onError: (error, variables, context) => {
+      if (context?.previousTurns) {
+        queryClient.setQueryData(['turns'], context.previousTurns);
+      }
+      toast.error('Failed to update turn stage');
+    },
+    onSuccess: () => {
+      toast.success('Turn stage updated');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['turns'] });
+    },
+  });
+
+  const handleCreateTurn = async () => {
+    const turnData = {
+      ...newTurn,
+      vendorId: newTurn.vendorId || null,
+      turnDueDate: newTurn.turnDueDate ? new Date(newTurn.turnDueDate).toISOString() : null,
+      estimatedCost: newTurn.estimatedCost || null,
+      stageId: stages.find(s => s.isDefault)?.id || stages[0]?.id,
+      status: 'draft',
+    };
+    
+    createMutation.mutate(turnData);
   };
 
-  const handleStageChange = async (turnId: string, newStageId: string) => {
-    try {
-      const response = await fetch(`/api/turns/${turnId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
+  const handleStageChange = (turnId: string, newStageId: string) => {
+    const newStage = stages.find(s => s.id === newStageId);
+    if (newStage) {
+      updateStageMutation.mutate({
+        turnId,
+        updates: {
           stageId: newStageId,
-          status: stages.find(s => s.id === newStageId)?.key || 'draft'
-        }),
+          status: newStage.key || 'draft'
+        }
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to update turn');
-      }
-
-      await fetchData();
-    } catch (error) {
-      console.error('Failed to update turn:', error);
     }
   };
 
@@ -285,18 +355,16 @@ export default function TurnsPage() {
     }
   };
 
-  const formatDate = (timestamp: number | null) => {
-    if (!timestamp) return null;
-    return format(new Date(timestamp), 'MMM d, yyyy');
-  };
-
   const getDaysUntilDue = (dueDate: number | null) => {
     if (!dueDate) return null;
     const days = differenceInDays(new Date(dueDate), new Date());
     return days;
   };
 
-  if (loading) {
+  const isLoading = turnsLoading || stagesLoading;
+  const error = turnsError;
+
+  if (isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-[calc(100vh-200px)]">
@@ -310,7 +378,7 @@ export default function TurnsPage() {
     return (
       <DashboardLayout>
         <div className="text-center text-red-600 p-8">
-          Error: {error}
+          Error: {error instanceof Error ? error.message : 'An error occurred'}
         </div>
       </DashboardLayout>
     );
@@ -498,8 +566,11 @@ export default function TurnsPage() {
                 <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreateTurn} disabled={!newTurn.propertyId}>
-                  Create Turn
+                <Button 
+                  onClick={handleCreateTurn} 
+                  disabled={!newTurn.propertyId || createMutation.isPending}
+                >
+                  {createMutation.isPending ? 'Creating...' : 'Create Turn'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -628,6 +699,7 @@ export default function TurnsPage() {
                             <Select
                               value={stage.id}
                               onValueChange={(value) => handleStageChange(turnData.turn.id, value)}
+                              disabled={updateStageMutation.isPending}
                             >
                               <SelectTrigger className="w-[120px] h-8 text-xs">
                                 <SelectValue />
