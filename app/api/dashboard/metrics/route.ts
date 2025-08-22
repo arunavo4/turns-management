@@ -59,7 +59,7 @@ export async function GET() {
 
     // Calculate average turn time (in days)
     const completedTurns = allTurns.filter(t => t.status === 'completed');
-    let averageTurnTime = 14.5; // Default
+    let averageTurnTime = 0;
     if (completedTurns.length > 0) {
       const totalDays = completedTurns.reduce((sum, turn) => {
         if (turn.createdAt && turn.updatedAt) {
@@ -105,6 +105,33 @@ export async function GET() {
       .orderBy(desc(properties.createdAt))
       .limit(3);
 
+    // Calculate monthly targets based on historical data
+    const lastThreeMonths = new Date(now.getFullYear(), now.getMonth() - 3, 1).getTime();
+    const historicalTurns = allTurns.filter(t => 
+      t.createdAt >= lastThreeMonths && t.createdAt < startOfMonth
+    );
+    
+    // Average turns per month from last 3 months (or default to current active properties * 0.3)
+    const monthlyTurnTarget = historicalTurns.length > 0 
+      ? Math.round(historicalTurns.length / 3)
+      : Math.max(10, Math.round(activeProperties * 0.3));
+    
+    // Calculate revenue target based on historical average + 10% growth
+    const historicalRevenue = allTurns
+      .filter(t => 
+        t.status === 'completed' && 
+        t.updatedAt >= lastThreeMonths && 
+        t.updatedAt < startOfMonth
+      )
+      .reduce((sum, turn) => {
+        const cost = turn.actualCost ? parseFloat(turn.actualCost) : 0;
+        return sum + cost;
+      }, 0);
+    
+    const monthlyRevenueTarget = historicalRevenue > 0
+      ? Math.round((historicalRevenue / 3) * 1.1) // 10% growth target
+      : 50000; // Default target for new systems
+
     return NextResponse.json({
       metrics: {
         activeProperties,
@@ -116,6 +143,8 @@ export async function GET() {
         completedTurnsThisMonth,
         approvalsPending,
         propertyGrowth: activeProperties - lastMonthProperties,
+        monthlyTurnTarget,
+        monthlyRevenueTarget,
       },
       recentTurns: recentTurnsData,
       recentProperties,

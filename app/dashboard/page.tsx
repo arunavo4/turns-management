@@ -118,6 +118,8 @@ export default function Dashboard() {
       completedTurnsThisMonth: 0,
       approvalsPending: 0,
       propertyGrowth: 0,
+      monthlyTurnTarget: 0,
+      monthlyRevenueTarget: 0,
     },
     recentTurns: [],
     recentProperties: [],
@@ -193,7 +195,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {metrics.averageTurnTime.toFixed(1)} days
+                {metrics.averageTurnTime > 0 ? `${metrics.averageTurnTime.toFixed(1)} days` : 'N/A'}
               </div>
               <p className="text-xs text-muted-foreground">
                 {metrics.completionRate}% completion rate
@@ -331,9 +333,9 @@ export default function Dashboard() {
                 <div>
                   <div className="flex items-center justify-between text-sm">
                     <span>Turns Completed</span>
-                    <span className="font-medium">{metrics.completedTurnsThisMonth} of 28</span>
+                    <span className="font-medium">{metrics.completedTurnsThisMonth} of {metrics.monthlyTurnTarget}</span>
                   </div>
-                  <Progress value={(metrics.completedTurnsThisMonth / 28) * 100} className="mt-2 h-2" />
+                  <Progress value={(metrics.completedTurnsThisMonth / Math.max(1, metrics.monthlyTurnTarget)) * 100} className="mt-2 h-2" />
                 </div>
                 <div>
                   <div className="flex items-center justify-between text-sm">
@@ -353,10 +355,10 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between text-sm">
                     <span>Revenue Goal</span>
                     <span className="font-medium">
-                      {formatCurrency(metrics.monthlyRevenue)} / {formatCurrency(35000)}
+                      {formatCurrency(metrics.monthlyRevenue)} / {formatCurrency(metrics.monthlyRevenueTarget)}
                     </span>
                   </div>
-                  <Progress value={(metrics.monthlyRevenue / 35000) * 100} className="mt-2 h-2" />
+                  <Progress value={(metrics.monthlyRevenue / Math.max(1, metrics.monthlyRevenueTarget)) * 100} className="mt-2 h-2" />
                 </div>
               </CardContent>
             </Card>
