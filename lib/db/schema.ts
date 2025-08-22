@@ -472,3 +472,39 @@ export const documentsRelations = relations(documents, ({ one }) => ({
     references: [users.id]
   })
 }));
+
+// User Preferences table
+export const userPreferences = pgTable('user_preferences', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull().unique(),
+  
+  // Notification preferences
+  emailNotifications: boolean('email_notifications').default(true),
+  turnApprovals: boolean('turn_approvals').default(true),
+  overdueTurns: boolean('overdue_turns').default(true),
+  vendorUpdates: boolean('vendor_updates').default(false),
+  weeklyReports: boolean('weekly_reports').default(true),
+  
+  // Display preferences
+  theme: varchar('theme', { length: 20 }).default('light'),
+  language: varchar('language', { length: 10 }).default('en'),
+  timezone: varchar('timezone', { length: 50 }).default('America/Los_Angeles'),
+  dateFormat: varchar('date_format', { length: 20 }).default('MM/DD/YYYY'),
+  
+  // Security preferences
+  sessionTimeout: varchar('session_timeout', { length: 10 }).default('4h'),
+  twoFactorEnabled: boolean('two_factor_enabled').default(false),
+  
+  // Additional preferences as JSON
+  additionalSettings: jsonb('additional_settings'),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [userPreferences.userId],
+    references: [users.id]
+  })
+}));
