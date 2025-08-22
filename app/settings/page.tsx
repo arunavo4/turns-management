@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
@@ -110,33 +110,33 @@ export default function SettingsPage() {
 
   // Local state for form inputs
   const [profileForm, setProfileForm] = useState({
-    name: userProfile?.name || "",
-    email: userProfile?.email || "",
-    image: userProfile?.image || "",
+    name: "",
+    email: "",
+    image: "",
   });
 
   const [preferencesForm, setPreferencesForm] = useState({
-    notifications: userPreferences?.notifications || {
+    notifications: {
       email: true,
       turnApprovals: true,
       overdueTurns: true,
       vendorUpdates: false,
       weeklyReports: true,
     },
-    display: userPreferences?.display || {
+    display: {
       theme: "light",
       language: "en",
       timezone: "America/Los_Angeles",
       dateFormat: "MM/DD/YYYY",
     },
-    security: userPreferences?.security || {
+    security: {
       sessionTimeout: "4h",
       twoFactorEnabled: false,
     },
   });
 
   // Update local state when data is fetched
-  useState(() => {
+  React.useEffect(() => {
     if (userProfile) {
       setProfileForm({
         name: userProfile.name || "",
@@ -146,7 +146,7 @@ export default function SettingsPage() {
     }
   }, [userProfile]);
 
-  useState(() => {
+  React.useEffect(() => {
     if (userPreferences) {
       setPreferencesForm(userPreferences);
     }
@@ -343,8 +343,9 @@ export default function SettingsPage() {
                     <Label htmlFor="name">Full Name</Label>
                     <Input
                       id="name"
-                      value={profileForm.name}
+                      value={profileForm.name || ""}
                       onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                      placeholder="Enter your name"
                     />
                   </div>
                   <div className="space-y-2">
@@ -352,8 +353,9 @@ export default function SettingsPage() {
                     <Input
                       id="email"
                       type="email"
-                      value={profileForm.email}
+                      value={profileForm.email || ""}
                       onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                      placeholder="Enter your email"
                     />
                   </div>
                   <div className="space-y-2">

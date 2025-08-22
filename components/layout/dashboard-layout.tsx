@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "@/lib/auth-client";
+import { signOut, useSession } from "@/lib/auth-client";
 import {
   IconHome2,
   IconBuilding,
@@ -68,6 +68,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Default to collapsed
+  const { data: session, isPending: sessionLoading } = useSession();
   
   const { data: stats } = useQuery<Stats>({
     queryKey: ['layout-stats'],
@@ -260,23 +261,23 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             {sidebarCollapsed ? (
               <div className="flex justify-center">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/avatar.jpg" className="object-cover" />
+                  <AvatarImage src={session?.user?.image || undefined} className="object-cover" />
                   <AvatarFallback className="h-8 w-8 flex items-center justify-center">
-                    SJ
+                    {session?.user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
               </div>
             ) : (
               <div className="flex items-center">
                 <Avatar className="h-10 w-10 flex-none">
-                  <AvatarImage src="/avatar.jpg" className="object-cover" />
+                  <AvatarImage src={session?.user?.image || undefined} className="object-cover" />
                   <AvatarFallback className="h-10 w-10 flex items-center justify-center">
-                    SJ
+                    {session?.user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
                 <div className="ml-3 flex-1">
-                  <p className="text-sm font-medium">Sarah Johnson</p>
-                  <p className="text-xs text-muted-foreground">Property Manager</p>
+                  <p className="text-sm font-medium">{session?.user?.name || 'User'}</p>
+                  <p className="text-xs text-muted-foreground">{session?.user?.email || 'Loading...'}</p>
                 </div>
               </div>
             )}
@@ -363,15 +364,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3"
                   >
                     <Avatar className="h-8 w-8 flex-none">
-                      <AvatarImage src="/avatar.jpg" className="object-cover" />
+                      <AvatarImage src={session?.user?.image || undefined} className="object-cover" />
                       <AvatarFallback className="h-8 w-8 flex items-center justify-center">
-                        SJ
+                        {session?.user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="hidden md:block text-left">
-                      <p className="text-sm font-medium">Sarah Johnson</p>
+                      <p className="text-sm font-medium">{session?.user?.name || 'User'}</p>
                       <p className="text-xs text-muted-foreground">
-                        Property Manager
+                        {session?.user?.email || 'Loading...'}
                       </p>
                     </div>
                     <IconChevronDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
@@ -385,17 +386,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10 flex-none">
                         <AvatarImage
-                          src="/avatar.jpg"
+                          src={session?.user?.image || undefined}
                           className="object-cover"
                         />
                         <AvatarFallback className="h-10 w-10 flex items-center justify-center">
-                          SJ
+                          {session?.user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="font-medium">Sarah Johnson</p>
+                        <p className="font-medium">{session?.user?.name || 'User'}</p>
                         <p className="text-sm text-muted-foreground">
-                          sarah.johnson@company.com
+                          {session?.user?.email || 'Loading...'}
                         </p>
                       </div>
                     </div>
