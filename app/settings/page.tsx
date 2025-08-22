@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconUser,
@@ -42,25 +43,9 @@ import {
 } from "@/components/ui/dialog";
 
 // API functions
-const fetchUserProfile = async () => {
-  const response = await fetch("/api/user/profile");
-  if (!response.ok) throw new Error("Failed to fetch profile");
-  return response.json();
-};
-
 const fetchUserPreferences = async () => {
   const response = await fetch("/api/user/preferences");
   if (!response.ok) throw new Error("Failed to fetch preferences");
-  return response.json();
-};
-
-const updateUserProfile = async (data: any) => {
-  const response = await fetch("/api/user/profile", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!response.ok) throw new Error("Failed to update profile");
   return response.json();
 };
 
@@ -89,7 +74,17 @@ const changeUserPassword = async (data: any) => {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
-  const [activeSection, setActiveSection] = useState("profile");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeSection, setActiveSection] = useState("notifications");
+
+  // Set active section from URL params
+  useEffect(() => {
+    const section = searchParams.get('section');
+    if (section && ['notifications', 'security', 'display', 'data'].includes(section)) {
+      setActiveSection(section);
+    }
+  }, [searchParams]);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -98,23 +93,12 @@ export default function SettingsPage() {
   });
 
   // React Query hooks for fetching data
-  const { data: userProfile, isLoading: profileLoading } = useQuery({
-    queryKey: ["userProfile"],
-    queryFn: fetchUserProfile,
-  });
-
   const { data: userPreferences, isLoading: preferencesLoading } = useQuery({
     queryKey: ["userPreferences"],
     queryFn: fetchUserPreferences,
   });
 
   // Local state for form inputs
-  const [profileForm, setProfileForm] = useState({
-    name: "",
-    email: "",
-    image: "",
-  });
-
   const [preferencesForm, setPreferencesForm] = useState({
     notifications: {
       email: true,
@@ -137,33 +121,12 @@ export default function SettingsPage() {
 
   // Update local state when data is fetched
   React.useEffect(() => {
-    if (userProfile) {
-      setProfileForm({
-        name: userProfile.name || "",
-        email: userProfile.email || "",
-        image: userProfile.image || "",
-      });
-    }
-  }, [userProfile]);
-
-  React.useEffect(() => {
     if (userPreferences) {
       setPreferencesForm(userPreferences);
     }
   }, [userPreferences]);
 
   // Mutations
-  const profileMutation = useMutation({
-    mutationFn: updateUserProfile,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
-      toast.success("Profile updated successfully");
-    },
-    onError: () => {
-      toast.error("Failed to update profile");
-    },
-  });
-
   const notificationsMutation = useMutation({
     mutationFn: (data: any) => updateUserPreferences({ notifications: data }),
     onSuccess: () => {
@@ -247,14 +210,13 @@ export default function SettingsPage() {
   };
 
   const sectionButtons = [
-    { id: "profile", label: "Profile", icon: IconUser },
     { id: "notifications", label: "Notifications", icon: IconBell },
     { id: "security", label: "Security", icon: IconShield },
     { id: "display", label: "Display", icon: IconPalette },
     { id: "data", label: "Data & Export", icon: IconDownload },
   ];
 
-  if (profileLoading || preferencesLoading) {
+  if (preferencesLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[400px]">
@@ -268,11 +230,20 @@ export default function SettingsPage() {
     <DashboardLayout>
       <div className="space-y-8">
         {/* Page Header */}
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground">
-            Manage your account settings and system preferences
-          </p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
+            <p className="text-muted-foreground">
+              Manage your account settings and system preferences
+            </p>
+          </div>
+          <Button 
+            variant="outline"
+            onClick={() => router.push('/profile')}
+          >
+            <IconUser className="mr-2 h-4 w-4" />
+            View Profile
+          </Button>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -326,62 +297,6 @@ export default function SettingsPage() {
 
           {/* Settings Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Profile Settings */}
-            {activeSection === "profile" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <IconUser className="h-5 w-5" />
-                    Profile Information
-                  </CardTitle>
-                  <CardDescription>
-                    Update your personal information and contact details
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input
-                      id="name"
-                      value={profileForm.name || ""}
-                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                      placeholder="Enter your name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={profileForm.email || ""}
-                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                      placeholder="Enter your email"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="avatar">Avatar URL</Label>
-                    <Input
-                      id="avatar"
-                      value={profileForm.image}
-                      onChange={(e) => setProfileForm({ ...profileForm, image: e.target.value })}
-                      placeholder="https://example.com/avatar.jpg"
-                    />
-                  </div>
-                  <div className="pt-4">
-                    <Button 
-                      onClick={() => profileMutation.mutate(profileForm)} 
-                      disabled={profileMutation.isPending}
-                    >
-                      {profileMutation.isPending && (
-                        <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      Save Changes
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Notification Settings */}
             {activeSection === "notifications" && (
               <Card>

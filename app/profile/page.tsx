@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "@/lib/auth-client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   IconUser,
   IconMail,
@@ -30,13 +33,59 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import DashboardLayout from "@/components/layout/dashboard-layout";
+import { IconLoader2 } from "@tabler/icons-react";
+
+// API functions
+const fetchUserProfile = async () => {
+  const response = await fetch("/api/user/profile");
+  if (!response.ok) throw new Error("Failed to fetch profile");
+  return response.json();
+};
+
+const updateUserProfile = async (data: any) => {
+  const response = await fetch("/api/user/profile", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("Failed to update profile");
+  return response.json();
+};
+
+const changeUserPassword = async (data: any) => {
+  const response = await fetch("/api/user/password", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to change password");
+  }
+  return response.json();
+};
 
 export default function ProfilePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: session } = useSession();
   const [isEditMode, setIsEditMode] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+
+  // Fetch user profile
+  const { data: userProfile, isLoading } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: fetchUserProfile,
+  });
+
   const [profile, setProfile] = useState({
-    name: "Sarah Johnson",
-    email: "sarah.johnson@company.com",
+    name: "",
+    email: "",
     phone: "(555) 123-4567",
     role: "Property Manager",
     department: "Property Management",
@@ -47,15 +96,96 @@ export default function ProfilePage() {
 
   const [editedProfile, setEditedProfile] = useState(profile);
 
+  // Update profile state when data is fetched
+  useEffect(() => {
+    if (userProfile) {
+      const newProfile = {
+        name: userProfile.name || "",
+        email: userProfile.email || "",
+        phone: profile.phone, // Keep default for now
+        role: profile.role, // Keep default for now
+        department: profile.department, // Keep default for now
+        joinDate: new Date(userProfile.createdAt).toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        }),
+        location: profile.location, // Keep default for now
+        bio: profile.bio, // Keep default for now
+      };
+      setProfile(newProfile);
+      setEditedProfile(newProfile);
+    }
+  }, [userProfile]);
+
+  // Mutations
+  const profileMutation = useMutation({
+    mutationFn: updateUserProfile,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+      setProfile({
+        ...profile,
+        name: data.name,
+        email: data.email,
+      });
+      setIsEditMode(false);
+      toast.success("Profile updated successfully");
+    },
+    onError: () => {
+      toast.error("Failed to update profile");
+    },
+  });
+
+  const passwordMutation = useMutation({
+    mutationFn: changeUserPassword,
+    onSuccess: () => {
+      toast.success("Password changed successfully");
+      setPasswordDialogOpen(false);
+      setPasswordData({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+    },
+    onError: (error: any) => {
+      toast.error(error.message);
+    },
+  });
+
   const handleSaveProfile = () => {
-    setProfile(editedProfile);
-    setIsEditMode(false);
+    profileMutation.mutate({
+      name: editedProfile.name,
+      email: editedProfile.email,
+      image: session?.user?.image || null,
+    });
+  };
+
+  const handlePasswordChange = () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error("New passwords do not match");
+      return;
+    }
+    
+    passwordMutation.mutate({
+      currentPassword: passwordData.currentPassword,
+      newPassword: passwordData.newPassword,
+    });
   };
 
   const handleCancelEdit = () => {
     setEditedProfile(profile);
     setIsEditMode(false);
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <IconLoader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -91,8 +221,10 @@ export default function ProfilePage() {
               <div className="flex flex-col items-center space-y-4">
                 <div className="relative">
                   <Avatar className="h-32 w-32">
-                    <AvatarImage src="/avatar.jpg" className="object-cover" />
-                    <AvatarFallback className="text-2xl">SJ</AvatarFallback>
+                    <AvatarImage src={session?.user?.image || undefined} className="object-cover" />
+                    <AvatarFallback className="text-2xl">
+                      {profile.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+                    </AvatarFallback>
                   </Avatar>
                   {isEditMode && (
                     <Button
@@ -266,7 +398,7 @@ export default function ProfilePage() {
               <CardDescription>Common tasks and settings</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Dialog>
+              <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="w-full justify-start">
                     Change Password
@@ -282,27 +414,59 @@ export default function ProfilePage() {
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label htmlFor="current-password">Current Password</Label>
-                      <Input id="current-password" type="password" />
+                      <Input 
+                        id="current-password" 
+                        type="password" 
+                        value={passwordData.currentPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="new-password">New Password</Label>
-                      <Input id="new-password" type="password" />
+                      <Input 
+                        id="new-password" 
+                        type="password" 
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="confirm-password">Confirm New Password</Label>
-                      <Input id="confirm-password" type="password" />
+                      <Input 
+                        id="confirm-password" 
+                        type="password" 
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                      />
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button variant="outline">Cancel</Button>
-                    <Button>Update Password</Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setPasswordDialogOpen(false)}
+                      disabled={passwordMutation.isPending}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={handlePasswordChange} disabled={passwordMutation.isPending}>
+                      {passwordMutation.isPending && <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Update Password
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
-              <Button variant="outline" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start"
+                onClick={() => router.push('/settings?section=security')}
+              >
                 Two-Factor Authentication
               </Button>
-              <Button variant="outline" className="w-full justify-start">
+              <Button 
+                variant="outline" 
+                className="w-full justify-start"
+                onClick={() => router.push('/settings?section=notifications')}
+              >
                 Email Notifications
               </Button>
               <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive">
