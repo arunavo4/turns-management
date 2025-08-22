@@ -11,9 +11,40 @@ import {
   IconLayoutKanban,
   IconLayoutList,
   IconTable,
+  IconFilter,
+  IconChevronDown,
+  IconX,
+  IconBuilding,
+  IconCalendar,
+  IconCurrencyDollar,
+  IconUser,
 } from "@tabler/icons-react";
-import EnhancedKanbanBoard from './kanban-board';
 import DashboardLayout from "@/components/layout/dashboard-layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { format, formatDistanceToNow, differenceInDays } from "date-fns";
 
 interface TurnStage {
   id: string;
@@ -40,9 +71,9 @@ interface Turn {
     status: string;
     priority: string;
     stageId: string | null;
-    moveOutDate: string | null;
-    turnAssignmentDate: string | null;
-    turnDueDate: string | null;
+    moveOutDate: number | null;
+    turnAssignmentDate: number | null;
+    turnDueDate: number | null;
     vendorId: string | null;
     assignedFlooringVendor: string | null;
     estimatedCost: string | null;
@@ -54,8 +85,8 @@ interface Turn {
     gasStatus: boolean;
     trashOutNeeded: boolean;
     appliancesNeeded: boolean;
-    createdAt: string;
-    updatedAt: string;
+    createdAt: number;
+    updatedAt: number;
   };
   property: {
     id: string;
@@ -75,207 +106,80 @@ interface Turn {
   } | null;
 }
 
+interface Property {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
+interface Vendor {
+  id: string;
+  companyName: string;
+  contactName: string;
+  phone: string;
+}
 
 export default function TurnsPage() {
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [stages, setStages] = useState<TurnStage[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewType, setViewType] = useState<'kanban' | 'list' | 'table'>('kanban');
-  const [stages, setStages] = useState<TurnStage[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterPriority, setFilterPriority] = useState("all");
+  const [filterStage, setFilterStage] = useState("all");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newTurn, setNewTurn] = useState({
+    propertyId: "",
+    vendorId: "",
+    priority: "medium",
+    estimatedCost: "",
+    scopeOfWork: "",
+    turnDueDate: "",
+    notes: "",
+    powerStatus: false,
+    waterStatus: false,
+    gasStatus: false,
+    trashOutNeeded: false,
+    appliancesNeeded: false,
+  });
 
-  // Fetch turns and stages from API
+  // Fetch all data on mount
   useEffect(() => {
-    fetchTurns();
-    fetchStages();
+    fetchData();
   }, []);
 
-  const fetchStages = async () => {
-    // For now, use default stages
-    const defaultStages: TurnStage[] = [
-      {
-        id: '1',
-        key: 'draft',
-        name: 'Draft',
-        sequence: 1,
-        color: 'gray',
-        icon: 'IconFile',
-        description: 'Initial turn creation',
-        isActive: true,
-        isDefault: true,
-      },
-      {
-        id: '2',
-        key: 'secure_property',
-        name: 'Secure Property',
-        sequence: 2,
-        color: 'yellow',
-        icon: 'IconLock',
-        description: 'Property needs to be secured',
-        isActive: true,
-        requiresLockBox: true,
-      },
-      {
-        id: '3',
-        key: 'inspection',
-        name: 'Inspection',
-        sequence: 3,
-        color: 'blue',
-        icon: 'IconEye',
-        description: 'Property inspection phase',
-        isActive: true,
-      },
-      {
-        id: '4',
-        key: 'scope_review',
-        name: 'Scope Review',
-        sequence: 4,
-        color: 'purple',
-        icon: 'IconClipboardList',
-        description: 'Review scope of work',
-        isActive: true,
-        requiresApproval: true,
-        requiresAmount: true,
-      },
-      {
-        id: '5',
-        key: 'vendor_assigned',
-        name: 'Vendor Assigned',
-        sequence: 5,
-        color: 'indigo',
-        icon: 'IconUsers',
-        description: 'Vendor has been assigned',
-        isActive: true,
-        requiresVendor: true,
-      },
-      {
-        id: '6',
-        key: 'in_progress',
-        name: 'In Progress',
-        sequence: 6,
-        color: 'orange',
-        icon: 'IconRefresh',
-        description: 'Turn work in progress',
-        isActive: true,
-      },
-      {
-        id: '7',
-        key: 'change_order',
-        name: 'Change Order',
-        sequence: 7,
-        color: 'amber',
-        icon: 'IconExclamationTriangle',
-        description: 'Change order required',
-        isActive: true,
-        requiresApproval: true,
-      },
-      {
-        id: '8',
-        key: 'turns_complete',
-        name: 'Turns Complete',
-        sequence: 8,
-        color: 'green',
-        icon: 'IconCircleCheck',
-        description: 'Turn work completed',
-        isActive: true,
-        isFinal: true,
-      },
-      {
-        id: '9',
-        key: 'scan_360',
-        name: '360 Scan',
-        sequence: 9,
-        color: 'teal',
-        icon: 'IconCamera',
-        description: '360 degree scan completed',
-        isActive: true,
-      },
-    ];
-    setStages(defaultStages);
-  };
-
-  const fetchTurns = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      // Mock data for demonstration
-      const mockData = [
-        {
-          turn: {
-            id: "550e8400-e29b-41d4-a716-446655440001",
-            turnNumber: "TURN-2024-001",
-            propertyId: "1",
-            status: "in_progress",
-            priority: "high",
-            stageId: null,
-            moveOutDate: null,
-            turnAssignmentDate: null,
-            turnDueDate: "2024-12-31",
-            vendorId: "1",
-            assignedFlooringVendor: null,
-            estimatedCost: "3500.00",
-            actualCost: null,
-            scopeOfWork: "Full paint, carpet replacement, appliance check",
-            notes: null,
-            powerStatus: true,
-            waterStatus: true,
-            gasStatus: true,
-            trashOutNeeded: false,
-            appliancesNeeded: false,
-            createdAt: "2024-08-19",
-            updatedAt: "2024-08-19",
-          },
-          property: {
-            id: "1",
-            name: "Pine Grove House",
-            address: "123 Pine St",
-            city: "Austin",
-            state: "TX",
-            zipCode: "78701",
-          },
-          vendor: {
-            id: "1",
-            companyName: "Quick Fix Maintenance",
-          },
-          stage: null,
-        },
-        {
-          turn: {
-            id: "550e8400-e29b-41d4-a716-446655440002",
-            turnNumber: "TURN-2024-002",
-            propertyId: "2",
-            status: "requested",
-            priority: "medium",
-            stageId: null,
-            moveOutDate: null,
-            turnAssignmentDate: null,
-            turnDueDate: "2024-12-25",
-            vendorId: null,
-            assignedFlooringVendor: null,
-            estimatedCost: "2200.00",
-            actualCost: null,
-            scopeOfWork: "Kitchen renovation, bathroom tile repair",
-            notes: null,
-            powerStatus: false,
-            waterStatus: true,
-            gasStatus: false,
-            trashOutNeeded: true,
-            appliancesNeeded: true,
-            createdAt: "2024-08-18",
-            updatedAt: "2024-08-18",
-          },
-          property: {
-            id: "2",
-            name: "Oak Manor Apartment",
-            address: "456 Oak Ave",
-            city: "Dallas",
-            state: "TX",
-            zipCode: "75201",
-          },
-          vendor: null,
-          stage: null,
-        },
-      ];
       
-      setTurns(mockData);
+      // Fetch all data in parallel
+      const [turnsRes, stagesRes, propertiesRes, vendorsRes] = await Promise.all([
+        fetch('/api/turns'),
+        fetch('/api/turn-stages'),
+        fetch('/api/properties'),
+        fetch('/api/vendors'),
+      ]);
+
+      if (!turnsRes.ok || !stagesRes.ok || !propertiesRes.ok || !vendorsRes.ok) {
+        throw new Error('Failed to fetch data');
+      }
+
+      const [turnsData, stagesData, propertiesData, vendorsData] = await Promise.all([
+        turnsRes.json(),
+        stagesRes.json(),
+        propertiesRes.json(),
+        vendorsRes.json(),
+      ]);
+
+      setTurns(turnsData);
+      setStages(stagesData.sort((a: TurnStage, b: TurnStage) => a.sequence - b.sequence));
+      setProperties(propertiesData);
+      setVendors(vendorsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -283,90 +187,557 @@ export default function TurnsPage() {
     }
   };
 
-  const handleStageUpdate = (stageId: string, updates: Partial<TurnStage>) => {
-    setStages(prev => prev.map(s => s.id === stageId ? { ...s, ...updates } : s));
-    // TODO: Save to API
+  const handleCreateTurn = async () => {
+    try {
+      const response = await fetch('/api/turns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...newTurn,
+          vendorId: newTurn.vendorId || null,
+          turnDueDate: newTurn.turnDueDate ? new Date(newTurn.turnDueDate).toISOString() : null,
+          estimatedCost: newTurn.estimatedCost || null,
+          stageId: stages.find(s => s.isDefault)?.id || stages[0]?.id,
+          status: 'draft',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create turn');
+      }
+
+      await fetchData();
+      setShowCreateDialog(false);
+      setNewTurn({
+        propertyId: "",
+        vendorId: "",
+        priority: "medium",
+        estimatedCost: "",
+        scopeOfWork: "",
+        turnDueDate: "",
+        notes: "",
+        powerStatus: false,
+        waterStatus: false,
+        gasStatus: false,
+        trashOutNeeded: false,
+        appliancesNeeded: false,
+      });
+    } catch (error) {
+      console.error('Failed to create turn:', error);
+    }
   };
 
-  const handleStageCreate = (stage: Omit<TurnStage, 'id'>) => {
-    const newStage = { ...stage, id: Date.now().toString() };
-    setStages(prev => [...prev, newStage]);
-    // TODO: Save to API
-  };
-
-  const handleStageDelete = (stageId: string) => {
-    setStages(prev => prev.filter(s => s.id !== stageId));
-    // TODO: Delete from API
-  };
-
-  const handleTurnUpdate = async (turnId: string, updates: any) => {
+  const handleStageChange = async (turnId: string, newStageId: string) => {
     try {
       const response = await fetch(`/api/turns/${turnId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updates),
+        body: JSON.stringify({ 
+          stageId: newStageId,
+          status: stages.find(s => s.id === newStageId)?.key || 'draft'
+        }),
       });
 
       if (!response.ok) {
         throw new Error('Failed to update turn');
       }
 
-      fetchTurns();
+      await fetchData();
     } catch (error) {
       console.error('Failed to update turn:', error);
-      fetchTurns();
     }
   };
 
-  const handleTurnCreate = async (turn: any) => {
-    // TODO: Implement turn creation
-    console.log('Creating turn:', turn);
+  // Filter and sort turns
+  const filteredTurns = turns.filter((turnData) => {
+    const matchesSearch = 
+      turnData.turn.turnNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (turnData.property?.name.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (turnData.property?.address.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (turnData.turn.scopeOfWork?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
+    
+    const matchesPriority = filterPriority === "all" || turnData.turn.priority === filterPriority;
+    const matchesStage = filterStage === "all" || turnData.turn.stageId === filterStage;
+    
+    return matchesSearch && matchesPriority && matchesStage;
+  });
+
+  // Group turns by stage
+  const turnsByStage = stages.reduce((acc, stage) => {
+    acc[stage.id] = filteredTurns.filter(t => 
+      t.turn.stageId === stage.id || 
+      (!t.turn.stageId && stage.isDefault)
+    );
+    return acc;
+  }, {} as Record<string, Turn[]>);
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return 'bg-red-100 text-red-700 border-red-200';
+      case 'high': return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'low': return 'bg-green-100 text-green-700 border-green-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
   };
 
+  const formatDate = (timestamp: number | null) => {
+    if (!timestamp) return null;
+    return format(new Date(timestamp), 'MMM d, yyyy');
+  };
+
+  const getDaysUntilDue = (dueDate: number | null) => {
+    if (!dueDate) return null;
+    const days = differenceInDays(new Date(dueDate), new Date());
+    return days;
+  };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <IconRefresh className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+          <IconRefresh className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center text-red-600 p-8">
-        Error: {error}
-      </div>
+      <DashboardLayout>
+        <div className="text-center text-red-600 p-8">
+          Error: {error}
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      <div className="space-y-4">
-        {/* Compact Header like GitHub Projects */}
-        <div className="flex items-center justify-between bg-white rounded-lg border p-3">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold">Turns Management</h1>
-            <span className="text-sm text-muted-foreground">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Turns Management</h1>
+            <p className="text-muted-foreground">
               {turns.length} turns across {stages.filter(s => s.isActive).length} stages
-            </span>
+            </p>
           </div>
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <IconPlus className="h-4 w-4" />
+                New Turn
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Create New Turn</DialogTitle>
+                <DialogDescription>
+                  Add a new turn to the workflow. Turns will start in the draft stage.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="property">Property *</Label>
+                    <Select
+                      value={newTurn.propertyId}
+                      onValueChange={(value) => setNewTurn({ ...newTurn, propertyId: value })}
+                    >
+                      <SelectTrigger id="property">
+                        <SelectValue placeholder="Select property" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {properties.map((property) => (
+                          <SelectItem key={property.id} value={property.id}>
+                            {property.name} - {property.address}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="vendor">Vendor</Label>
+                    <Select
+                      value={newTurn.vendorId || "none"}
+                      onValueChange={(value) => setNewTurn({ ...newTurn, vendorId: value === "none" ? "" : value })}
+                    >
+                      <SelectTrigger id="vendor">
+                        <SelectValue placeholder="Select vendor (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No vendor</SelectItem>
+                        {vendors.map((vendor) => (
+                          <SelectItem key={vendor.id} value={vendor.id}>
+                            {vendor.companyName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select
+                      value={newTurn.priority}
+                      onValueChange={(value) => setNewTurn({ ...newTurn, priority: value })}
+                    >
+                      <SelectTrigger id="priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="dueDate">Due Date</Label>
+                    <Input
+                      id="dueDate"
+                      type="date"
+                      value={newTurn.turnDueDate}
+                      onChange={(e) => setNewTurn({ ...newTurn, turnDueDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="estimatedCost">Estimated Cost</Label>
+                  <Input
+                    id="estimatedCost"
+                    type="number"
+                    placeholder="0.00"
+                    value={newTurn.estimatedCost}
+                    onChange={(e) => setNewTurn({ ...newTurn, estimatedCost: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="scope">Scope of Work</Label>
+                  <Textarea
+                    id="scope"
+                    placeholder="Describe the work to be done..."
+                    value={newTurn.scopeOfWork}
+                    onChange={(e) => setNewTurn({ ...newTurn, scopeOfWork: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <Label>Utilities & Requirements</Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="power"
+                        checked={newTurn.powerStatus}
+                        onCheckedChange={(checked) => setNewTurn({ ...newTurn, powerStatus: checked })}
+                      />
+                      <Label htmlFor="power">Power On</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="water"
+                        checked={newTurn.waterStatus}
+                        onCheckedChange={(checked) => setNewTurn({ ...newTurn, waterStatus: checked })}
+                      />
+                      <Label htmlFor="water">Water On</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="gas"
+                        checked={newTurn.gasStatus}
+                        onCheckedChange={(checked) => setNewTurn({ ...newTurn, gasStatus: checked })}
+                      />
+                      <Label htmlFor="gas">Gas On</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="trash"
+                        checked={newTurn.trashOutNeeded}
+                        onCheckedChange={(checked) => setNewTurn({ ...newTurn, trashOutNeeded: checked })}
+                      />
+                      <Label htmlFor="trash">Trash Out Needed</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="appliances"
+                        checked={newTurn.appliancesNeeded}
+                        onCheckedChange={(checked) => setNewTurn({ ...newTurn, appliancesNeeded: checked })}
+                      />
+                      <Label htmlFor="appliances">Appliances Needed</Label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    placeholder="Additional notes..."
+                    value={newTurn.notes}
+                    onChange={(e) => setNewTurn({ ...newTurn, notes: e.target.value })}
+                    rows={2}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateTurn} disabled={!newTurn.propertyId}>
+                  Create Turn
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        {/* Enhanced Kanban Board */}
-        <EnhancedKanbanBoard
-          turns={turns}
-          stages={stages}
-          onStageUpdate={handleStageUpdate}
-          onStageCreate={handleStageCreate}
-          onStageDelete={handleStageDelete}
-          onTurnUpdate={handleTurnUpdate}
-          onTurnCreate={handleTurnCreate}
-          viewType={viewType}
-          onViewChange={setViewType}
-        />
+        {/* Filters Bar */}
+        <div className="flex items-center gap-4 p-4 bg-white rounded-lg border">
+          <div className="flex-1 max-w-sm">
+            <div className="relative">
+              <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search turns..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+          
+          <Select value={filterPriority} onValueChange={setFilterPriority}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="urgent">Urgent</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStage} onValueChange={setFilterStage}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stages</SelectItem>
+              {stages.filter(s => s.isActive).map((stage) => (
+                <SelectItem key={stage.id} value={stage.id}>
+                  {stage.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {(searchQuery || filterPriority !== 'all' || filterStage !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchQuery("");
+                setFilterPriority("all");
+                setFilterStage("all");
+              }}
+              className="gap-2"
+            >
+              <IconX className="h-4 w-4" />
+              Clear filters
+            </Button>
+          )}
+        </div>
+
+        {/* Kanban Board */}
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {stages.filter(s => s.isActive).map((stage) => {
+            const stageTurns = turnsByStage[stage.id] || [];
+            
+            return (
+              <div
+                key={stage.id}
+                className="flex-shrink-0 w-[380px] bg-gray-50 rounded-lg"
+              >
+                {/* Stage Header */}
+                <div className="p-4 border-b bg-white rounded-t-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: stage.color }}
+                      />
+                      <h3 className="font-semibold text-sm">{stage.name}</h3>
+                      <Badge variant="secondary" className="text-xs">
+                        {stageTurns.length}
+                      </Badge>
+                    </div>
+                  </div>
+                  {stage.description && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stage.description}
+                    </p>
+                  )}
+                </div>
+
+                {/* Stage Cards */}
+                <div className="p-4 space-y-3 min-h-[200px]">
+                  {stageTurns.map((turnData) => {
+                    const daysUntilDue = getDaysUntilDue(turnData.turn.turnDueDate);
+                    const isOverdue = daysUntilDue !== null && daysUntilDue < 0;
+                    const isDueSoon = daysUntilDue !== null && daysUntilDue <= 3 && daysUntilDue >= 0;
+                    
+                    return (
+                      <Card 
+                        key={turnData.turn.id}
+                        className="cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => {
+                          // Handle card click - could open detail view
+                        }}
+                      >
+                        <CardContent className="p-4 space-y-3">
+                          {/* Header */}
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-1">
+                              <h4 className="font-semibold text-sm">
+                                {turnData.turn.turnNumber}
+                              </h4>
+                              <Badge 
+                                variant="outline" 
+                                className={cn("text-xs", getPriorityColor(turnData.turn.priority))}
+                              >
+                                {turnData.turn.priority.toUpperCase()}
+                              </Badge>
+                            </div>
+                            <Select
+                              value={stage.id}
+                              onValueChange={(value) => handleStageChange(turnData.turn.id, value)}
+                            >
+                              <SelectTrigger className="w-[120px] h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {stages.filter(s => s.isActive).map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Property Info */}
+                          {turnData.property && (
+                            <div className="flex items-start gap-2 text-sm">
+                              <IconBuilding className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <p className="font-medium truncate">
+                                  {turnData.property.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {turnData.property.city}, {turnData.property.state}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Scope of Work */}
+                          {turnData.turn.scopeOfWork && (
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {turnData.turn.scopeOfWork}
+                            </p>
+                          )}
+
+                          {/* Vendor */}
+                          {turnData.vendor && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <IconUser className="h-4 w-4 text-muted-foreground" />
+                              <span className="truncate">{turnData.vendor.companyName}</span>
+                            </div>
+                          )}
+
+                          {/* Cost */}
+                          {(turnData.turn.estimatedCost || turnData.turn.actualCost) && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <IconCurrencyDollar className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">
+                                ${parseFloat(turnData.turn.actualCost || turnData.turn.estimatedCost || "0").toLocaleString()}
+                              </span>
+                              {turnData.turn.actualCost && (
+                                <Badge variant="outline" className="text-xs">Actual</Badge>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Due Date */}
+                          {turnData.turn.turnDueDate && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <IconCalendar className="h-4 w-4 text-muted-foreground" />
+                              <span className={cn(
+                                isOverdue && "text-red-600 font-medium",
+                                isDueSoon && "text-orange-600 font-medium"
+                              )}>
+                                {isOverdue 
+                                  ? `${Math.abs(daysUntilDue)} days overdue`
+                                  : daysUntilDue === 0 
+                                  ? "Due today"
+                                  : daysUntilDue === 1
+                                  ? "Due tomorrow"
+                                  : `Due in ${daysUntilDue} days`
+                                }
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Utilities */}
+                          <div className="flex gap-2 flex-wrap">
+                            {turnData.turn.powerStatus && (
+                              <Badge variant="secondary" className="text-xs">Power</Badge>
+                            )}
+                            {turnData.turn.waterStatus && (
+                              <Badge variant="secondary" className="text-xs">Water</Badge>
+                            )}
+                            {turnData.turn.gasStatus && (
+                              <Badge variant="secondary" className="text-xs">Gas</Badge>
+                            )}
+                            {turnData.turn.trashOutNeeded && (
+                              <Badge variant="secondary" className="text-xs">Trash Out</Badge>
+                            )}
+                            {turnData.turn.appliancesNeeded && (
+                              <Badge variant="secondary" className="text-xs">Appliances</Badge>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  
+                  {stageTurns.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      No turns in this stage
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </DashboardLayout>
   );
