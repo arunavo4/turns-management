@@ -130,14 +130,14 @@ export default function Dashboard() {
       <div className="space-y-8">
         {/* Page Header */}
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Welcome back! Here&apos;s your property management overview.
           </p>
         </div>
 
         {/* Metrics Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Active Properties</CardTitle>
@@ -218,20 +218,22 @@ export default function Dashboard() {
                 </div>
                 <Button
                   variant="outline"
-                  className="min-h-[36px] px-4 hover:scale-105 transition-transform duration-200 flex items-center gap-2"
+                  className="min-h-[36px] px-2 sm:px-4 hover:scale-105 transition-transform duration-200 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
                   onClick={() => router.push('/turns')}
                 >
-                  View All
-                  <IconChevronRight className="h-4 w-4" />
+                  <span className="hidden sm:inline">View All</span>
+                  <span className="sm:hidden">All</span>
+                  <IconChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Turn</TableHead>
-                    <TableHead>Property</TableHead>
+                    <TableHead className="hidden sm:table-cell">Property</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Cost</TableHead>
                   </TableRow>
@@ -247,7 +249,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         {item.property ? (
                           <div>
                             <div className="font-medium">{item.property.name}</div>
@@ -285,6 +287,7 @@ export default function Dashboard() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
 
@@ -411,16 +414,17 @@ export default function Dashboard() {
               </div>
               <Button 
                 variant="outline" 
-                className="flex items-center gap-2"
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4"
                 onClick={() => router.push('/properties')}
               >
-                View All Properties
-                <IconChevronRight className="h-4 w-4" />
+                <span className="hidden sm:inline">View All Properties</span>
+                <span className="sm:hidden">View All</span>
+                <IconChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {recentProperties.map((property: any) => (
                 <Card key={property.id} className="border-l-4 border-l-primary">
                   <CardContent className="p-4">

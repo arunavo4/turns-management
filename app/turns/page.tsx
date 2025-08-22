@@ -388,21 +388,21 @@ export default function TurnsPage() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Turns Management</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Turns Management</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               {turns.length} turns across {stages.filter(s => s.isActive).length} stages
             </p>
           </div>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2 w-full sm:w-auto">
                 <IconPlus className="h-4 w-4" />
                 New Turn
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create New Turn</DialogTitle>
                 <DialogDescription>
@@ -411,7 +411,7 @@ export default function TurnsPage() {
               </DialogHeader>
               
               <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="property">Property *</Label>
                     <Select
@@ -452,7 +452,7 @@ export default function TurnsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="priority">Priority</Label>
                     <Select
@@ -506,7 +506,7 @@ export default function TurnsPage() {
 
                 <div className="space-y-4">
                   <Label>Utilities & Requirements</Label>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid sm:grid-cols-2 gap-4">
                     <div className="flex items-center space-x-2">
                       <Switch
                         id="power"
@@ -578,8 +578,8 @@ export default function TurnsPage() {
         </div>
 
         {/* Filters Bar */}
-        <div className="flex items-center gap-4 p-4 bg-white rounded-lg border">
-          <div className="flex-1 max-w-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-white rounded-lg border">
+          <div className="flex-1 w-full sm:max-w-sm">
             <div className="relative">
               <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -592,8 +592,9 @@ export default function TurnsPage() {
             </div>
           </div>
           
+          <div className="flex gap-2 w-full sm:w-auto">
           <Select value={filterPriority} onValueChange={setFilterPriority}>
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="flex-1 sm:w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -606,7 +607,7 @@ export default function TurnsPage() {
           </Select>
 
           <Select value={filterStage} onValueChange={setFilterStage}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="flex-1 sm:w-[160px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -618,6 +619,7 @@ export default function TurnsPage() {
               ))}
             </SelectContent>
           </Select>
+          </div>
 
           {(searchQuery || filterPriority !== 'all' || filterStage !== 'all') && (
             <Button
@@ -628,7 +630,7 @@ export default function TurnsPage() {
                 setFilterPriority("all");
                 setFilterStage("all");
               }}
-              className="gap-2"
+              className="gap-1 sm:gap-2 w-full sm:w-auto"
             >
               <IconX className="h-4 w-4" />
               Clear filters
@@ -637,14 +639,14 @@ export default function TurnsPage() {
         </div>
 
         {/* Kanban Board */}
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
           {stages.filter(s => s.isActive).map((stage) => {
             const stageTurns = turnsByStage[stage.id] || [];
             
             return (
               <div
                 key={stage.id}
-                className="flex-shrink-0 w-[380px] bg-gray-50 rounded-lg"
+                className="flex-shrink-0 w-[280px] sm:w-[380px] bg-gray-50 rounded-lg"
               >
                 {/* Stage Header */}
                 <div className="p-4 border-b bg-white rounded-t-lg">

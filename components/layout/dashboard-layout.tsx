@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "@/lib/auth-client";
 import {
   IconHome2,
   IconBuilding,
@@ -64,6 +65,7 @@ const fetchStats = async () => {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Default to collapsed
   
@@ -119,9 +121,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     },
   ];
 
-  const handleSignOut = () => {
-    // Mock sign out function
-    console.log("Sign out clicked");
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.push("/");
+    } catch (error) {
+      console.error("Sign out failed:", error);
+    }
   };
 
   return (
@@ -318,8 +324,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <IconMenu2 className="h-6 w-6" />
             </button>
 
-            {/* Search */}
-            <div className="flex-1 max-w-lg">
+            {/* Search - Hidden on mobile, shown on larger screens */}
+            <div className="flex-1 max-w-lg hidden sm:block">
               <div className="relative">
                 <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -330,9 +336,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
-              {/* Help */}
-              <Button variant="ghost" size="icon">
+            <div className="flex items-center space-x-1 sm:space-x-2">
+              {/* Search on mobile */}
+              <Button variant="ghost" size="icon" className="sm:hidden">
+                <IconSearch className="h-5 w-5" />
+              </Button>
+              
+              {/* Help - Hidden on mobile */}
+              <Button variant="ghost" size="icon" className="hidden sm:inline-flex">
                 <IconHelp className="h-5 w-5" />
               </Button>
 
@@ -342,14 +353,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span className="absolute top-1 right-1 h-2 w-2 bg-destructive rounded-full"></span>
               </Button>
 
-              <div className="h-8 w-px bg-border mx-2" />
+              <div className="h-8 w-px bg-border mx-1 sm:mx-2 hidden sm:block" />
 
               {/* User menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="flex items-center space-x-2"
+                    className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3"
                   >
                     <Avatar className="h-8 w-8 flex-none">
                       <AvatarImage src="/avatar.jpg" className="object-cover" />
@@ -363,7 +374,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         Property Manager
                       </p>
                     </div>
-                    <IconChevronDown className="h-4 w-4 text-muted-foreground" />
+                    <IconChevronDown className="h-4 w-4 text-muted-foreground hidden sm:block" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -390,17 +401,23 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="my-2" />
-                  <DropdownMenuItem className="cursor-pointer py-2">
-                    <IconUser className="mr-3 h-4 w-4" />
-                    <span>View Profile</span>
+                  <DropdownMenuItem className="cursor-pointer py-2" asChild>
+                    <Link href="/profile">
+                      <IconUser className="mr-3 h-4 w-4" />
+                      <span>View Profile</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer py-2">
-                    <IconSettings className="mr-3 h-4 w-4" />
-                    <span>Settings</span>
+                  <DropdownMenuItem className="cursor-pointer py-2" asChild>
+                    <Link href="/settings">
+                      <IconSettings className="mr-3 h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer py-2">
-                    <IconHelp className="mr-3 h-4 w-4" />
-                    <span>Help & Support</span>
+                  <DropdownMenuItem className="cursor-pointer py-2" asChild>
+                    <Link href="/help">
+                      <IconHelp className="mr-3 h-4 w-4" />
+                      <span>Help & Support</span>
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="my-2" />
                   <DropdownMenuItem

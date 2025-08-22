@@ -210,15 +210,15 @@ export default function PropertiesPage() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Properties</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Properties</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Manage your property portfolio
             </p>
           </div>
           <Button 
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 w-full sm:w-auto"
             onClick={() => router.push("/properties/new")}
           >
             <IconPlus className="h-4 w-4" />
@@ -229,7 +229,7 @@ export default function PropertiesPage() {
         {/* Filters and View Toggle */}
         <Card>
           <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col gap-4">
               <div className="flex-1">
                 <div className="relative">
                   <IconSearch className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -241,8 +241,9 @@ export default function PropertiesPage() {
                   />
                 </div>
               </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -256,7 +257,7 @@ export default function PropertiesPage() {
                 </SelectContent>
               </Select>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -268,7 +269,7 @@ export default function PropertiesPage() {
                   <SelectItem value="commercial">Commercial</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="flex gap-2">
+              <div className="flex gap-2 sm:ml-auto">
                 <Button
                   variant={viewMode === "grid" ? "default" : "outline"}
                   size="icon"
@@ -284,13 +285,14 @@ export default function PropertiesPage() {
                   <IconList className="h-4 w-4" />
                 </Button>
               </div>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Properties Display */}
         {viewMode === "grid" ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredProperties.map((property) => (
               <Card 
                 key={property.id} 
@@ -386,15 +388,16 @@ export default function PropertiesPage() {
             ))}
           </div>
         ) : (
-          <Card>
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Property</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead className="hidden sm:table-cell">Address</TableHead>
+                  <TableHead className="hidden md:table-cell">Type</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Beds/Baths</TableHead>
+                  <TableHead className="hidden lg:table-cell">Beds/Baths</TableHead>
                   <TableHead>Rent</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -411,7 +414,7 @@ export default function PropertiesPage() {
                         {property.name}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <div>
                         <div>{property.address}</div>
                         <div className="text-sm text-muted-foreground">
@@ -419,13 +422,13 @@ export default function PropertiesPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{property.type.replace("_", " ")}</TableCell>
+                    <TableCell className="hidden md:table-cell">{property.type.replace("_", " ")}</TableCell>
                     <TableCell>
                       <Badge className={getStatusColor(property.status)}>
                         {property.status.replace("_", " ").toUpperCase()}
                       </Badge>
                     </TableCell>
-                    <TableCell>{property.bedrooms}/{property.bathrooms}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{property.bedrooms}/{property.bathrooms}</TableCell>
                     <TableCell>{formatCurrency(parseFloat(property.monthlyRent))}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -459,6 +462,7 @@ export default function PropertiesPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           </Card>
         )}
       </div>

@@ -230,14 +230,14 @@ export default function ReportsPage() {
     <DashboardLayout>
       <div className="space-y-8">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Reports & Analytics</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Reports & Analytics</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Analyze performance, trends, and insights across your property portfolio
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={timeRange} onValueChange={setTimeRange}>
               <SelectTrigger className="w-32">
                 <SelectValue />
@@ -262,13 +262,13 @@ export default function ReportsPage() {
               onClick={exportToCSV}
             >
               <IconDownload className="h-4 w-4" />
-              Export
+              <span className="hidden sm:inline">Export</span>
             </Button>
           </div>
         </div>
 
         {/* Key Metrics */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -346,7 +346,7 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               {monthlyData.length > 0 ? (
-                <ChartContainer config={monthlyRevenueConfig} className="h-80 w-full">
+                <ChartContainer config={monthlyRevenueConfig} className="h-64 sm:h-80 w-full">
                   <ComposedChart data={monthlyData} accessibilityLayer>
                     <defs>
                       <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -430,7 +430,7 @@ export default function ReportsPage() {
             <CardContent>
               {statusDistribution.filter(s => s.value > 0).length > 0 ? (
                 <>
-                  <ChartContainer config={statusConfig} className="mx-auto aspect-square h-80">
+                  <ChartContainer config={statusConfig} className="mx-auto aspect-square h-64 sm:h-80">
                     <PieChart accessibilityLayer>
                       <ChartTooltip
                         cursor={false}
@@ -515,7 +515,7 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               {vendorPerformance.length > 0 ? (
-                <ChartContainer config={vendorPerformanceConfig} className="h-80 w-full">
+                <ChartContainer config={vendorPerformanceConfig} className="h-64 sm:h-80 w-full">
                   <BarChart data={vendorPerformance.slice(0, 5)} layout="horizontal" accessibilityLayer>
                     <CartesianGrid horizontal={false} className="stroke-muted/30" />
                     <XAxis 
@@ -556,7 +556,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Bottom Grid */}
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {/* Top Performing Vendors */}
           <Card>
             <CardHeader>
@@ -688,7 +688,7 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             {weeklyTrends.length > 0 ? (
-              <ChartContainer config={weeklyTrendsConfig} className="h-64 w-full">
+              <ChartContainer config={weeklyTrendsConfig} className="h-48 sm:h-64 w-full">
                 <BarChart data={weeklyTrends} accessibilityLayer>
                   <CartesianGrid vertical={false} className="stroke-muted/30" />
                   <XAxis 

@@ -357,15 +357,15 @@ export default function VendorsPage() {
     <DashboardLayout>
       <div className="space-y-8">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Vendors</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Vendors</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Manage your vendor network and track performance
             </p>
           </div>
           <Button 
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 w-full sm:w-auto"
             onClick={() => router.push("/vendors/new")}
           >
             <IconPlus className="h-4 w-4" />
@@ -374,7 +374,7 @@ export default function VendorsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Vendors</CardTitle>
@@ -443,9 +443,9 @@ export default function VendorsPage() {
         </div>
 
         {/* Search and Filters */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-1 gap-2">
-            <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1 sm:max-w-sm">
               <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
@@ -455,8 +455,9 @@ export default function VendorsPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+            <div className="flex gap-2">
             <Select value={filterSpecialty} onValueChange={setFilterSpecialty}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="flex-1 sm:w-48">
                 <SelectValue placeholder="All Specialties" />
               </SelectTrigger>
               <SelectContent>
@@ -469,7 +470,7 @@ export default function VendorsPage() {
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="flex-1 sm:w-32">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -478,9 +479,10 @@ export default function VendorsPage() {
                 <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-end">
             <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
               <TabsList>
                 <TabsTrigger value="grid" className="flex items-center gap-2">
@@ -499,7 +501,7 @@ export default function VendorsPage() {
         {/* Vendors Content */}
         <Tabs value={viewMode} className="space-y-4">
           <TabsContent value="grid">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredVendors.map((vendor) => (
                 <VendorCard key={vendor.id} vendor={vendor} />
               ))}
@@ -507,17 +509,18 @@ export default function VendorsPage() {
           </TabsContent>
 
           <TabsContent value="table">
-            <Card>
+            <Card className="overflow-hidden">
               <CardContent className="p-0">
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Vendor</TableHead>
-                      <TableHead>Specialties</TableHead>
-                      <TableHead>Rating</TableHead>
-                      <TableHead>Performance</TableHead>
+                      <TableHead className="hidden sm:table-cell">Specialties</TableHead>
+                      <TableHead className="hidden md:table-cell">Rating</TableHead>
+                      <TableHead className="hidden lg:table-cell">Performance</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Avg Cost</TableHead>
+                      <TableHead className="hidden md:table-cell text-right">Avg Cost</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -545,7 +548,7 @@ export default function VendorsPage() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <div className="flex flex-wrap gap-1">
                             {(vendor.specialties || []).slice(0, 2).map((specialty, index) => (
                               <Badge key={index} variant="outline" className="text-xs">
@@ -559,7 +562,7 @@ export default function VendorsPage() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           {vendor.rating ? (
                             <div>
                               <div className="flex items-center gap-1">
@@ -576,7 +579,7 @@ export default function VendorsPage() {
                             <span className="text-muted-foreground text-sm">No rating</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           <div className="space-y-1">
                             {vendor.onTimeRate && (
                               <div className="text-sm">
@@ -604,7 +607,7 @@ export default function VendorsPage() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell className="hidden md:table-cell text-right font-medium">
                           {vendor.averageCost ? formatCurrency(parseFloat(vendor.averageCost)) : '-'}
                         </TableCell>
                         <TableCell>
@@ -641,6 +644,7 @@ export default function VendorsPage() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
