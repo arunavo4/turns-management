@@ -38,6 +38,7 @@ import {
   LineChart,
   Line,
   Area,
+  AreaChart,
   BarChart,
   Bar,
   PieChart,
@@ -46,9 +47,17 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+  ComposedChart,
+  Label,
 } from 'recharts';
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -102,6 +111,59 @@ export default function ReportsPage() {
     document.body.removeChild(link);
     toast.success("Report exported successfully");
   };
+
+  // Chart configurations
+  const monthlyRevenueConfig = {
+    revenue: {
+      label: "Revenue",
+      color: "var(--chart-1)",
+    },
+    turns: {
+      label: "Completed Turns",
+      color: "var(--chart-2)",
+    },
+  } satisfies ChartConfig;
+
+  const statusConfig = {
+    completed: {
+      label: "Completed",
+      color: "#22c55e",
+    },
+    inProgress: {
+      label: "In Progress",
+      color: "#f97316",
+    },
+    pending: {
+      label: "Pending",
+      color: "#eab308",
+    },
+    cancelled: {
+      label: "Cancelled",
+      color: "#ef4444",
+    },
+  } satisfies ChartConfig;
+
+  const weeklyTrendsConfig = {
+    completed: {
+      label: "Completed",
+      color: "var(--chart-1)",
+    },
+    started: {
+      label: "Started",
+      color: "var(--chart-2)",
+    },
+    overdue: {
+      label: "Overdue",
+      color: "var(--chart-5)",
+    },
+  } satisfies ChartConfig;
+
+  const vendorPerformanceConfig = {
+    onTimeRate: {
+      label: "On-Time Rate",
+      color: "var(--chart-3)",
+    },
+  } satisfies ChartConfig;
 
   if (isLoading) {
     return (
@@ -284,52 +346,71 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               {monthlyData.length > 0 ? (
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={monthlyData}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis 
-                        dataKey="month" 
-                        className="text-xs fill-muted-foreground"
-                      />
-                      <YAxis 
-                        yAxisId="revenue"
-                        orientation="left"
-                        className="text-xs fill-muted-foreground"
-                        tickFormatter={(value) => `$${(value/1000).toFixed(0)}k`}
-                      />
-                      <YAxis 
-                        yAxisId="turns"
-                        orientation="right"
-                        className="text-xs fill-muted-foreground"
-                      />
-                      <Tooltip 
-                        formatter={(value: any, name: any) => [
-                          name === 'revenue' ? formatCurrency(value) : value,
-                          name === 'revenue' ? 'Revenue' : 'Turns'
-                        ]}
-                        labelFormatter={(label) => `Month: ${label}`}
-                      />
-                      <Area
-                        yAxisId="revenue"
-                        type="monotone"
-                        dataKey="revenue"
-                        stroke="#3b82f6"
-                        fill="#3b82f6"
-                        fillOpacity={0.1}
-                        strokeWidth={2}
-                      />
-                      <Line
-                        yAxisId="turns"
-                        type="monotone"
-                        dataKey="turns"
-                        stroke="#f59e0b"
-                        strokeWidth={2}
-                        dot={{ fill: '#f59e0b', r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                <ChartContainer config={monthlyRevenueConfig} className="h-80 w-full">
+                  <ComposedChart data={monthlyData} accessibilityLayer>
+                    <defs>
+                      <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="5%"
+                          stopColor="var(--color-revenue)"
+                          stopOpacity={0.8}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="var(--color-revenue)"
+                          stopOpacity={0.1}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} className="stroke-muted/30" />
+                    <XAxis 
+                      dataKey="month" 
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                    />
+                    <YAxis 
+                      yAxisId="revenue"
+                      orientation="left"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      tickFormatter={(value) => `$${(value/1000).toFixed(0)}k`}
+                    />
+                    <YAxis 
+                      yAxisId="turns"
+                      orientation="right"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                    />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent 
+                        formatter={(value, name) => {
+                          if (name === "revenue") return formatCurrency(value as number);
+                          return value;
+                        }}
+                      />} 
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Area
+                      yAxisId="revenue"
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="var(--color-revenue)"
+                      fill="url(#fillRevenue)"
+                      strokeWidth={2}
+                    />
+                    <Line
+                      yAxisId="turns"
+                      type="monotone"
+                      dataKey="turns"
+                      stroke="var(--color-turns)"
+                      strokeWidth={2}
+                      dot={{ fill: 'var(--color-turns)', r: 4 }}
+                    />
+                  </ComposedChart>
+                </ChartContainer>
               ) : (
                 <div className="h-80 flex items-center justify-center text-muted-foreground">
                   No data available for the selected period
@@ -349,26 +430,58 @@ export default function ReportsPage() {
             <CardContent>
               {statusDistribution.filter(s => s.value > 0).length > 0 ? (
                 <>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={statusDistribution.filter(s => s.value > 0)}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={120}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {statusDistribution.filter(s => s.value > 0).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value) => [value, 'Turns']} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <ChartContainer config={statusConfig} className="mx-auto aspect-square h-80">
+                    <PieChart accessibilityLayer>
+                      <ChartTooltip
+                        cursor={false}
+                        content={<ChartTooltipContent hideLabel />}
+                      />
+                      <Pie
+                        data={statusDistribution.filter(s => s.value > 0)}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={120}
+                        paddingAngle={5}
+                        dataKey="value"
+                        nameKey="name"
+                      >
+                        {statusDistribution.filter(s => s.value > 0).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                        <Label
+                          content={({ viewBox }) => {
+                            if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                              const total = statusDistribution.reduce((sum, item) => sum + item.value, 0);
+                              return (
+                                <text
+                                  x={viewBox.cx}
+                                  y={viewBox.cy}
+                                  textAnchor="middle"
+                                  dominantBaseline="middle"
+                                >
+                                  <tspan
+                                    x={viewBox.cx}
+                                    y={viewBox.cy}
+                                    className="fill-foreground text-3xl font-bold"
+                                  >
+                                    {total}
+                                  </tspan>
+                                  <tspan
+                                    x={viewBox.cx}
+                                    y={(viewBox.cy || 0) + 24}
+                                    className="fill-muted-foreground"
+                                  >
+                                    Total Turns
+                                  </tspan>
+                                </text>
+                              );
+                            }
+                          }}
+                        />
+                      </Pie>
+                    </PieChart>
+                  </ChartContainer>
                   <div className="mt-4 space-y-2">
                     {statusDistribution.map((item, index) => (
                       <div key={index} className="flex items-center justify-between">
@@ -402,31 +515,37 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               {vendorPerformance.length > 0 ? (
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={vendorPerformance.slice(0, 5)} layout="horizontal">
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis 
-                        type="number" 
-                        className="text-xs fill-muted-foreground"
-                        domain={[0, 100]}
-                      />
-                      <YAxis 
-                        type="category" 
-                        dataKey="name" 
-                        className="text-xs fill-muted-foreground"
-                        width={100}
-                      />
-                      <Tooltip 
-                        formatter={(value: any, name: any) => [
-                          `${value}%`,
-                          'On-Time Rate'
-                        ]}
-                      />
-                      <Bar dataKey="onTimeRate" fill="#22c55e" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <ChartContainer config={vendorPerformanceConfig} className="h-80 w-full">
+                  <BarChart data={vendorPerformance.slice(0, 5)} layout="horizontal" accessibilityLayer>
+                    <CartesianGrid horizontal={false} className="stroke-muted/30" />
+                    <XAxis 
+                      type="number" 
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      domain={[0, 100]}
+                    />
+                    <YAxis 
+                      type="category" 
+                      dataKey="name" 
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      width={100}
+                    />
+                    <ChartTooltip 
+                      cursor={false}
+                      content={<ChartTooltipContent 
+                        formatter={(value) => `${value}%`}
+                      />} 
+                    />
+                    <Bar 
+                      dataKey="onTimeRate" 
+                      fill="var(--color-onTimeRate)" 
+                      radius={[0, 4, 4, 0]} 
+                    />
+                  </BarChart>
+                </ChartContainer>
               ) : (
                 <div className="h-80 flex items-center justify-center text-muted-foreground">
                   No vendor performance data available
@@ -569,24 +688,30 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             {weeklyTrends.length > 0 ? (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={weeklyTrends}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis 
-                      dataKey="week" 
-                      className="text-xs fill-muted-foreground"
-                    />
-                    <YAxis 
-                      className="text-xs fill-muted-foreground"
-                    />
-                    <Tooltip />
-                    <Bar dataKey="completed" fill="#22c55e" name="Completed" />
-                    <Bar dataKey="started" fill="#3b82f6" name="Started" />
-                    <Bar dataKey="overdue" fill="#ef4444" name="Overdue" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={weeklyTrendsConfig} className="h-64 w-full">
+                <BarChart data={weeklyTrends} accessibilityLayer>
+                  <CartesianGrid vertical={false} className="stroke-muted/30" />
+                  <XAxis 
+                    dataKey="week" 
+                    tickLine={false}
+                    tickMargin={10}
+                    axisLine={false}
+                  />
+                  <YAxis 
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <ChartTooltip 
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="dashed" />} 
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="completed" fill="var(--color-completed)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="started" fill="var(--color-started)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="overdue" fill="var(--color-overdue)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ChartContainer>
             ) : (
               <div className="h-64 flex items-center justify-center text-muted-foreground">
                 No weekly trend data available
