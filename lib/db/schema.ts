@@ -154,7 +154,7 @@ export const auditLogs = pgTable('audit_logs', {
   action: auditActionEnum('action').notNull(),
   
   // Who made the change
-  userId: uuid('user_id').notNull().references(() => users.id),
+  userId: uuid('user_id').references(() => users.id), // Made nullable to allow system actions
   userEmail: varchar('user_email', { length: 255 }).notNull(),
   userRole: userRoleEnum('user_role'),
   

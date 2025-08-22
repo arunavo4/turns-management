@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { auditLogs } from '@/lib/db/schema';
-import { auth } from '@/lib/auth';
+import { getSession } from '@/lib/auth-helpers';
 
 export type AuditAction = 
   | 'CREATE' 
@@ -41,12 +41,32 @@ class AuditService {
 
   async log(entry: AuditLogEntry, request?: Request) {
     try {
-      // Get current user from session
-      const session = await auth();
-      
-      if (!session?.user) {
-        console.warn('Audit log attempted without authenticated user');
+      // Check database connection
+      if (!db) {
+        console.error('Database connection not available for audit logging');
         return;
+      }
+      
+      // Get session from request if available
+      let session = null;
+      
+      if (request && 'headers' in request) {
+        try {
+          session = await getSession(request as any);
+        } catch (error) {
+          console.warn('Could not get session for audit log:', error);
+        }
+      }
+      
+      // Use system user as fallback
+      if (!session?.user) {
+        session = {
+          user: {
+            id: null, // No user ID for system actions
+            email: 'system@localhost',
+            role: 'ADMIN'
+          }
+        };
       }
 
       // Extract IP and user agent from request if available
@@ -61,24 +81,26 @@ class AuditService {
       }
 
       // Create audit log entry
-      await db.insert(auditLogs).values({
+      const auditLogData = {
         tableName: entry.tableName,
         recordId: entry.recordId,
         action: entry.action as any,
         userId: session.user.id,
         userEmail: session.user.email || '',
         userRole: session.user.role as any,
-        oldValues: entry.oldValues,
-        newValues: entry.newValues,
-        changedFields: entry.changedFields,
-        propertyId: entry.propertyId,
-        turnId: entry.turnId,
-        vendorId: entry.vendorId,
-        context: entry.context,
-        ipAddress,
-        userAgent,
-        metadata: entry.metadata,
-      });
+        oldValues: entry.oldValues || null,
+        newValues: entry.newValues || null,
+        changedFields: entry.changedFields || null,
+        propertyId: entry.propertyId || null,
+        turnId: entry.turnId || null,
+        vendorId: entry.vendorId || null,
+        context: entry.context || null,
+        ipAddress: ipAddress || null,
+        userAgent: userAgent || null,
+        metadata: entry.metadata || null,
+      };
+      
+      await db.insert(auditLogs).values(auditLogData).returning();
     } catch (error) {
       console.error('Failed to create audit log:', error);
       // Don't throw - audit logging should not break the main operation

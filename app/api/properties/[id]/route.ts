@@ -88,13 +88,17 @@ export async function PUT(
     }
 
     // Log the update in audit log
-    await auditService.logUpdate(
-      'properties',
-      id,
-      currentProperty[0],
-      updatedProperty[0],
-      'Property updated via API'
-    );
+    const changedFields = auditService.calculateChangedFields(currentProperty[0], updatedProperty[0]);
+    await auditService.log({
+      tableName: 'properties',
+      recordId: id,
+      action: 'UPDATE',
+      oldValues: currentProperty[0],
+      newValues: updatedProperty[0],
+      changedFields,
+      propertyId: id,
+      context: 'Property updated via API',
+    }, request);
 
     return NextResponse.json(updatedProperty[0]);
   } catch (error) {
@@ -141,12 +145,14 @@ export async function DELETE(
       .returning();
 
     // Log the deletion in audit log
-    await auditService.logDelete(
-      'properties',
-      id,
-      propertyToDelete[0],
-      'Property deleted via API'
-    );
+    await auditService.log({
+      tableName: 'properties',
+      recordId: id,
+      action: 'DELETE',
+      oldValues: propertyToDelete[0],
+      propertyId: id,
+      context: 'Property deleted via API',
+    }, request);
 
     return NextResponse.json({ success: true });
   } catch (error) {

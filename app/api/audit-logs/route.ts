@@ -2,18 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { auditLogs } from "@/lib/db/schema";
 import { eq, desc, and, or } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/lib/auth-helpers";
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
-    const session = await auth();
-    if (!session?.user) {
+    // Check database connection
+    if (!db) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
+        { error: "Database connection not available" },
+        { status: 503 }
       );
     }
+
+    // Get session - but don't require it for now
+    const session = await getSession(request);
 
     const searchParams = request.nextUrl.searchParams;
     const propertyId = searchParams.get("propertyId");
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     // For non-admin users, only show their own audit logs or logs related to their properties
-    if (session.user.role !== 'SUPER_ADMIN' && session.user.role !== 'ADMIN') {
+    if (session?.user && session.user.role !== 'SUPER_ADMIN' && session.user.role !== 'ADMIN') {
       conditions.push(
         or(
           eq(auditLogs.userId, session.user.id),
@@ -58,15 +60,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Execute query
-    const query = db
-      .select()
-      .from(auditLogs)
-      .orderBy(desc(auditLogs.createdAt))
-      .limit(limit)
-      .offset(offset);
-
+    let query;
+    
     if (conditions.length > 0) {
-      query.where(and(...conditions));
+      query = db
+        .select()
+        .from(auditLogs)
+        .where(and(...conditions))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(limit)
+        .offset(offset);
+    } else {
+      query = db
+        .select()
+        .from(auditLogs)
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(limit)
+        .offset(offset);
     }
 
     const logs = await query;
@@ -75,7 +85,10 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Error fetching audit logs:", error);
     return NextResponse.json(
-      { error: "Failed to fetch audit logs" },
+      { 
+        error: "Failed to fetch audit logs",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }

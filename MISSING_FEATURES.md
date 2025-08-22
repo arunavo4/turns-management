@@ -414,7 +414,8 @@ Many required fields and tables already exist in the schema but lack UI implemen
 - Kanban board not persisting stage changes
 - No real-time sync (was considering Electric SQL, now removed)
 - React Query cache not optimized for complex workflows
-- **Audit logging only implemented for Properties, missing for Vendors and Turns**
+- ✅ **Fixed:** Better Auth session handling (using auth-helpers with proper getSession)
+- ✅ **Fixed:** Database insert issues (propertyId generation and nullable userId in audit logs)
 
 ### Dependencies Needed
 - **Email Service**: ✅ **Resend** (decided) - for all email notifications

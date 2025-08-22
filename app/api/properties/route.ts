@@ -53,8 +53,11 @@ export async function POST(request: NextRequest) {
       return value && value.trim() !== '' ? value : null;
     };
     
+    // Generate a unique property ID if not provided
+    const propertyId = body.propertyId || `PROP-${Date.now()}`;
+    
     const newProperty = await db.insert(properties).values({
-      propertyId: body.propertyId,
+      propertyId: propertyId,
       name: body.name,
       address: body.address,
       city: body.city,
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
       bathrooms: body.bathrooms || 0,
       squareFeet: body.squareFeet || 0,
       yearBuilt: body.yearBuilt || new Date().getFullYear(),
-      monthlyRent: body.monthlyRent || 0,
+      monthlyRent: body.monthlyRent || '0',
       market: body.market || null,
       owner: body.owner || null,
       propertyManagerId: uuidOrNull(body.propertyManagerId),
@@ -90,18 +93,23 @@ export async function POST(request: NextRequest) {
     }).returning();
     
     // Log the creation in audit log
-    await auditService.logCreate(
-      'properties',
-      newProperty[0].id,
-      newProperty[0],
-      'Property created via API'
-    );
+    await auditService.log({
+      tableName: 'properties',
+      recordId: newProperty[0].id,
+      action: 'CREATE',
+      newValues: newProperty[0],
+      propertyId: newProperty[0].id,
+      context: 'Property created via API',
+    }, request);
     
     return NextResponse.json(newProperty[0], { status: 201 });
   } catch (error) {
     console.error("Error creating property:", error);
     return NextResponse.json(
-      { error: "Failed to create property" },
+      { 
+        error: "Failed to create property",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }
