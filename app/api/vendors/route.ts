@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       state: body.state,
       zipCode: body.zipCode,
       specialties: body.specialties || [],
-      insuranceExpiry: body.insuranceExpiry ? new Date(body.insuranceExpiry) : null,
+      insuranceExpiry: body.insuranceExpiry ? new Date(body.insuranceExpiry).getTime() : null,
       licenseNumber: body.licenseNumber,
       rating: body.rating,
       isApproved: body.isApproved || false,

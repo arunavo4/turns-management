@@ -86,12 +86,12 @@ export async function PUT(
     
     const updateData: any = {
       ...rest,
-      updatedAt: new Date(),
+      updatedAt: Date.now(),
     };
     
     // Convert insuranceExpiry string to Date if provided
     if (insuranceExpiry) {
-      updateData.insuranceExpiry = new Date(insuranceExpiry);
+      updateData.insuranceExpiry = new Date(insuranceExpiry).getTime();
     }
     
     // Handle numeric fields that might come as strings from the form
@@ -109,7 +109,7 @@ export async function PUT(
     
     // Convert lastJobDate string to Date if provided
     if (lastJobDate) {
-      updateData.lastJobDate = new Date(lastJobDate);
+      updateData.lastJobDate = new Date(lastJobDate).getTime();
     }
     
     const updatedVendor = await db

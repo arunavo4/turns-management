@@ -71,13 +71,27 @@ export async function PATCH(
       );
     }
 
+    // Process the update data to handle date fields if present
+    const updateData = { ...body };
+    
+    // Convert date strings to Unix timestamps if present
+    if (updateData.moveOutDate) {
+      updateData.moveOutDate = new Date(updateData.moveOutDate).getTime();
+    }
+    if (updateData.turnAssignmentDate) {
+      updateData.turnAssignmentDate = new Date(updateData.turnAssignmentDate).getTime();
+    }
+    if (updateData.turnDueDate) {
+      updateData.turnDueDate = new Date(updateData.turnDueDate).getTime();
+    }
+    
+    // Ensure updatedAt is always set
+    updateData.updatedAt = Date.now();
+
     // Update the turn
     const updatedTurn = await db
       .update(turns)
-      .set({
-        ...body,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(turns.id, id))
       .returning();
 
@@ -149,13 +163,45 @@ export async function PUT(
       );
     }
 
+    // Process the update data to handle date fields and remove read-only fields
+    const { 
+      id: _, 
+      createdAt: __,
+      createdBy: ___,
+      turnNumber: ____,
+      ...updateData 
+    } = body;
+    
+    // Convert date strings to Unix timestamps if present
+    if (updateData.moveOutDate) {
+      updateData.moveOutDate = new Date(updateData.moveOutDate).getTime();
+    }
+    if (updateData.turnAssignmentDate) {
+      updateData.turnAssignmentDate = new Date(updateData.turnAssignmentDate).getTime();
+    }
+    if (updateData.turnDueDate) {
+      updateData.turnDueDate = new Date(updateData.turnDueDate).getTime();
+    }
+    if (updateData.completionDate) {
+      updateData.completionDate = new Date(updateData.completionDate).getTime();
+    }
+    if (updateData.invoiceSubmittedDate) {
+      updateData.invoiceSubmittedDate = new Date(updateData.invoiceSubmittedDate).getTime();
+    }
+    if (updateData.dfoApprovalDate) {
+      updateData.dfoApprovalDate = new Date(updateData.dfoApprovalDate).getTime();
+    }
+    if (updateData.hoApprovalDate) {
+      updateData.hoApprovalDate = new Date(updateData.hoApprovalDate).getTime();
+    }
+    
+    // Ensure updatedAt is always set
+    updateData.updatedAt = Date.now();
+
     // Update the turn
     const updatedTurn = await db
       .update(turns)
-      .set({
-        ...body,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(turns.id, id))
       .returning();
 

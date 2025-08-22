@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, decimal, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, decimal, jsonb, pgEnum, bigint } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Enums
@@ -62,11 +62,11 @@ export const auditActionEnum = pgEnum('audit_action', [
   'COMPLETE'
 ]);
 
-// Base columns for all tables
+// Base columns for all tables - using Unix timestamps (milliseconds since epoch)
 const baseColumns = {
   id: uuid('id').defaultRandom().primaryKey(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: bigint('created_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull(),
   version: integer('version').default(1).notNull(),
   createdBy: uuid('created_by'),
   updatedBy: uuid('updated_by')
@@ -131,9 +131,9 @@ export const properties = pgTable('properties', {
   insurance: boolean('insurance').default(false), // Insurance status
   squatters: boolean('squatters').default(false), // Squatter status
   ownership: boolean('ownership').default(true), // Ownership status
-  moveInDate: timestamp('move_in_date'), // Move-in date
-  moveOutDate: timestamp('move_out_date'), // Move-out date
-  lastTurnDate: timestamp('last_turn_date'),
+  moveInDate: bigint('move_in_date', { mode: 'number' }), // Unix timestamp in milliseconds
+  moveOutDate: bigint('move_out_date', { mode: 'number' }), // Unix timestamp in milliseconds
+  lastTurnDate: bigint('last_turn_date', { mode: 'number' }), // Unix timestamp in milliseconds
   utilities: jsonb('utilities').default({
     power: false,
     water: false,
@@ -154,7 +154,7 @@ export const auditLogs = pgTable('audit_logs', {
   action: auditActionEnum('action').notNull(),
   
   // Who made the change
-  userId: uuid('user_id').references(() => users.id), // Made nullable to allow system actions
+  userId: text('user_id'), // Changed to text to match Better Auth user IDs, no FK constraint
   userEmail: varchar('user_email', { length: 255 }).notNull(),
   userRole: userRoleEnum('user_role'),
   
@@ -175,7 +175,7 @@ export const auditLogs = pgTable('audit_logs', {
   
   // Metadata
   metadata: jsonb('metadata'),
-  createdAt: timestamp('created_at').defaultNow().notNull()
+  createdAt: bigint('created_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull()
 });
 
 // Lock Box History table for property security tracking
@@ -184,16 +184,16 @@ export const lockBoxHistory = pgTable('lock_box_history', {
   propertyId: uuid('property_id').notNull().references(() => properties.id),
   turnId: uuid('turn_id'),
   
-  lockBoxInstallDate: timestamp('lock_box_install_date'),
+  lockBoxInstallDate: bigint('lock_box_install_date', { mode: 'number' }),
   lockBoxLocation: varchar('lock_box_location', { length: 255 }),
   oldLockBoxCode: varchar('old_lock_box_code', { length: 50 }),
   newLockBoxCode: varchar('new_lock_box_code', { length: 50 }),
-  changeDate: timestamp('change_date').defaultNow(),
+  changeDate: bigint('change_date', { mode: 'number' }).$defaultFn(() => Date.now()),
   changedBy: uuid('changed_by').references(() => users.id),
   reason: text('reason'),
   
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull()
+  createdAt: bigint('created_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull()
 });
 
 // Utility Providers table
@@ -205,7 +205,7 @@ export const utilityProviders = pgTable('utility_providers', {
   contactEmail: varchar('contact_email', { length: 255 }),
   website: varchar('website', { length: 500 }),
   isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at').defaultNow().notNull()
+  createdAt: bigint('created_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull()
 });
 
 // Property Utilities table for detailed utility tracking
@@ -255,8 +255,8 @@ export const propertyUtilities = pgTable('property_utilities', {
   occupancyStatus: varchar('occupancy_status', { length: 50 }),
   ownedBy: varchar('owned_by', { length: 255 }),
   
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull()
+  createdAt: bigint('created_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull(),
+  updatedAt: bigint('updated_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull()
 });
 
 // Vendors table
@@ -271,7 +271,7 @@ export const vendors = pgTable('vendors', {
   state: varchar('state', { length: 50 }),
   zipCode: varchar('zip_code', { length: 10 }),
   specialties: jsonb('specialties').default([]),
-  insuranceExpiry: timestamp('insurance_expiry'),
+  insuranceExpiry: bigint('insurance_expiry', { mode: 'number' }),
   licenseNumber: varchar('license_number', { length: 100 }),
   rating: decimal('rating', { precision: 3, scale: 2 }),
   isApproved: boolean('is_approved').default(false),
@@ -280,7 +280,7 @@ export const vendors = pgTable('vendors', {
   averageCost: decimal('average_cost', { precision: 10, scale: 2 }),
   completedJobs: integer('completed_jobs').default(0),
   onTimeRate: decimal('on_time_rate', { precision: 5, scale: 2 }),
-  lastJobDate: timestamp('last_job_date'),
+  lastJobDate: bigint('last_job_date', { mode: 'number' }),
   notes: text('notes'),
   performanceMetrics: jsonb('performance_metrics').default({
     completedTurns: 0,
@@ -311,13 +311,13 @@ export const turns = pgTable('turns', {
   stageId: uuid('stage_id').references(() => turnStages.id),
   
   // Dates
-  moveOutDate: timestamp('move_out_date'),
-  turnAssignmentDate: timestamp('turn_assignment_date'),
-  turnDueDate: timestamp('turn_due_date'),
-  turnCompletionDate: timestamp('turn_completion_date'),
-  punchListDate: timestamp('punch_list_date'),
-  scan360Date: timestamp('scan_360_date'),
-  leasingDate: timestamp('leasing_date'),
+  moveOutDate: bigint('move_out_date', { mode: 'number' }),
+  turnAssignmentDate: bigint('turn_assignment_date', { mode: 'number' }),
+  turnDueDate: bigint('turn_due_date', { mode: 'number' }),
+  turnCompletionDate: bigint('turn_completion_date', { mode: 'number' }),
+  punchListDate: bigint('punch_list_date', { mode: 'number' }),
+  scan360Date: bigint('scan_360_date', { mode: 'number' }),
+  leasingDate: bigint('leasing_date', { mode: 'number' }),
   
   // Vendors
   vendorId: uuid('vendor_id').references(() => vendors.id),
@@ -333,8 +333,8 @@ export const turns = pgTable('turns', {
   needsHoApproval: boolean('needs_ho_approval').default(false),
   dfoApprovedBy: uuid('dfo_approved_by').references(() => users.id),
   hoApprovedBy: uuid('ho_approved_by').references(() => users.id),
-  dfoApprovedAt: timestamp('dfo_approved_at'),
-  hoApprovedAt: timestamp('ho_approved_at'),
+  dfoApprovedAt: bigint('dfo_approved_at', { mode: 'number' }),
+  hoApprovedAt: bigint('ho_approved_at', { mode: 'number' }),
   rejectionReason: text('rejection_reason'),
   
   // Work details

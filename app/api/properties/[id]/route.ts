@@ -71,14 +71,63 @@ export async function PUT(
       );
     }
     
-    const updatedProperty = await db
-      .update(properties)
-      .set({
-        ...body,
-        updatedAt: new Date(),
-      })
-      .where(eq(properties.id, id))
-      .returning();
+    // Process the update data to handle date fields and remove read-only fields
+    const { 
+      id: _, 
+      createdAt,
+      createdBy,
+      updatedAt,
+      updatedBy,
+      version,
+      ...updateData 
+    } = body;
+    
+    // Handle all possible date fields - convert to Unix timestamps (milliseconds)
+    const dateFields = ['moveInDate', 'moveOutDate', 'lastTurnDate'];
+    
+    for (const field of dateFields) {
+      if (field in updateData) {
+        const value = updateData[field];
+        if (value === null || value === undefined || value === '') {
+          updateData[field] = null;
+        } else if (typeof value === 'string') {
+          // Convert string to Unix timestamp
+          updateData[field] = new Date(value).getTime();
+        } else if (typeof value === 'number') {
+          // Already a Unix timestamp, keep it
+          updateData[field] = value;
+        } else if (value instanceof Date) {
+          // Convert Date to Unix timestamp
+          updateData[field] = value.getTime();
+        } else {
+          // Invalid value, set to null
+          console.warn(`Invalid value for date field ${field}:`, value);
+          updateData[field] = null;
+        }
+      }
+    }
+    
+    // Ensure updatedAt is always set as Unix timestamp
+    updateData.updatedAt = Date.now();
+    
+    let updatedProperty;
+    try {
+      updatedProperty = await db
+        .update(properties)
+        .set(updateData)
+        .where(eq(properties.id, id))
+        .returning();
+    } catch (dbError) {
+      console.error('Database update error:', dbError);
+      console.error('Failed updateData keys:', Object.keys(updateData));
+      console.error('Failed updateData sample:', {
+        moveInDate: updateData.moveInDate,
+        moveOutDate: updateData.moveOutDate,
+        lastTurnDate: updateData.lastTurnDate,
+        updatedAt: updateData.updatedAt
+      });
+      throw dbError;
+    }
 
     if (updatedProperty.length === 0) {
       return NextResponse.json(
@@ -104,7 +153,10 @@ export async function PUT(
   } catch (error) {
     console.error("Error updating property:", error);
     return NextResponse.json(
-      { error: "Failed to update property" },
+      { 
+        error: "Failed to update property",
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }

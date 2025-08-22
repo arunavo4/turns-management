@@ -134,7 +134,7 @@ await resend.emails.send({
 - Lines: 23-33 (status selection)
 - Line: 42 (`_track_duration_field = 'stage_id'`)
 
-### 4. Audit Logs UI & Integration ✅
+### 4. Audit Logs UI & Integration ✅ COMPLETED
 **Priority: CRITICAL**
 - [x] Backend audit service (`/lib/audit-service.ts`)
 - [x] Audit logs API endpoint (`/api/audit-logs`)
@@ -162,6 +162,9 @@ await resend.emails.send({
 - ✅ All APIs (Properties, Vendors, Turns) now have audit logging
 - ✅ CSV export functionality implemented
 - ✅ Advanced filtering and search capabilities added
+- ✅ **Fixed userId type mismatch** - Changed from UUID to text for Better Auth compatibility
+- ✅ **Database schema updated** - Supports both Better Auth and system users
+- ✅ **All audit logging fully functional** - Properties, Vendors, and Turns all tracked
 
 **Completed Implementation:**
 1. **Property Detail Page** (`/app/properties/[id]/page.tsx`):
