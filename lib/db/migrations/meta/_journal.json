@@ -43,6 +43,13 @@
       "when": 1755891060879,
       "tag": "0005_outgoing_shriek",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1755892381898,
+      "tag": "0006_deep_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

@@ -508,3 +508,57 @@ export const userPreferencesRelations = relations(userPreferences, ({ one }) => 
     references: [users.id]
   })
 }));
+
+// Approval status enum
+export const approvalStatusEnum = pgEnum('approval_status', [
+  'pending',
+  'approved',
+  'rejected',
+  'cancelled'
+]);
+
+// Approval type enum
+export const approvalTypeEnum = pgEnum('approval_type', [
+  'dfo',
+  'ho'
+]);
+
+// Approvals table for tracking approval history
+export const approvals = pgTable('approvals', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  turnId: uuid('turn_id').notNull().references(() => turns.id),
+  type: approvalTypeEnum('type').notNull(),
+  status: approvalStatusEnum('status').default('pending').notNull(),
+  requestedAt: timestamp('requested_at').defaultNow().notNull(),
+  requestedBy: text('requested_by'),
+  approvedBy: text('approved_by'),
+  approvedAt: timestamp('approved_at'),
+  rejectedBy: text('rejected_by'),
+  rejectedAt: timestamp('rejected_at'),
+  rejectionReason: text('rejection_reason'),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Approval thresholds configuration
+export const approvalThresholds = pgTable('approval_thresholds', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  minAmount: decimal('min_amount', { precision: 10, scale: 2 }).notNull(),
+  maxAmount: decimal('max_amount', { precision: 10, scale: 2 }),
+  approvalType: approvalTypeEnum('approval_type').notNull(),
+  requiresSequential: boolean('requires_sequential').default(false), // If true, requires DFO before HO
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Relations for approvals
+export const approvalsRelations = relations(approvals, ({ one }) => ({
+  turn: one(turns, {
+    fields: [approvals.turnId],
+    references: [turns.id]
+  })
+}));
