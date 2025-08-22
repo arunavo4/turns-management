@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -40,59 +40,78 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const navigation = [
-  { 
-    name: "Dashboard", 
-    href: "/dashboard", 
-    icon: IconHome2, 
-    badge: null 
-  },
-  { 
-    name: "Properties", 
-    href: "/properties", 
-    icon: IconBuilding, 
-    badge: "47" 
-  },
-  { 
-    name: "Turns", 
-    href: "/turns", 
-    icon: IconRefresh, 
-    badge: "12" 
-  },
-  { 
-    name: "Vendors", 
-    href: "/vendors", 
-    icon: IconUsers, 
-    badge: null 
-  },
-  { 
-    name: "Reports", 
-    href: "/reports", 
-    icon: IconChartBar, 
-    badge: null 
-  },
-  { 
-    name: "Audit Logs", 
-    href: "/audit-logs", 
-    icon: IconHistory, 
-    badge: null 
-  },
-  { 
-    name: "Settings", 
-    href: "/settings", 
-    icon: IconSettings, 
-    badge: null 
-  },
-];
-
 interface DashboardLayoutProps {
   children: React.ReactNode;
+}
+
+interface Stats {
+  properties: number;
+  turns: number;
+  activeTurns: number;
+  vendors: number;
+  approvedVendors: number;
+  reports: number;
+  users: number;
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Default to collapsed
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    // Fetch statistics on mount
+    fetch('/api/stats')
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(err => console.error('Failed to fetch stats:', err));
+  }, []);
+
+  const navigation = [
+    { 
+      name: "Dashboard", 
+      href: "/dashboard", 
+      icon: IconHome2, 
+      badge: null 
+    },
+    { 
+      name: "Properties", 
+      href: "/properties", 
+      icon: IconBuilding, 
+      badge: stats?.properties || null
+    },
+    { 
+      name: "Turns", 
+      href: "/turns", 
+      icon: IconRefresh, 
+      badge: stats?.activeTurns || null
+    },
+    { 
+      name: "Vendors", 
+      href: "/vendors", 
+      icon: IconUsers, 
+      badge: stats?.vendors || null
+    },
+    { 
+      name: "Reports", 
+      href: "/reports", 
+      icon: IconChartBar, 
+      badge: null 
+    },
+    { 
+      name: "Audit Logs", 
+      href: "/audit-logs", 
+      icon: IconHistory, 
+      badge: null 
+    },
+    { 
+      name: "Settings", 
+      href: "/settings", 
+      icon: IconSettings, 
+      badge: null 
+    },
+  ];
 
   const handleSignOut = () => {
     // Mock sign out function
@@ -184,7 +203,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             : "text-muted-foreground"
                         )}
                       />
-                      {item.badge && (
+                      {item.badge && item.badge > 0 && (
                         <Badge
                           variant="secondary"
                           className="absolute -top-2 -right-2 h-4 w-4 p-0 text-xs flex items-center justify-center"
@@ -206,7 +225,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         />
                         <span>{item.name}</span>
                       </div>
-                      {item.badge && (
+                      {item.badge && item.badge > 0 && (
                         <Badge
                           variant="secondary"
                           className="ml-auto h-5 px-1.5 text-xs"
