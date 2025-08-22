@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconDownload,
@@ -13,6 +14,8 @@ import {
   IconChartBar,
   IconStar,
   IconAlertTriangle,
+  IconLoader2,
+  IconMinus,
 } from "@tabler/icons-react";
 import {
   Card,
@@ -46,68 +49,120 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { 
-  mockDashboardMetrics, 
-  mockVendors,
-  formatCurrency,
-  formatDate 
-} from "@/lib/mock-data";
+import { format } from "date-fns";
+import { toast } from "sonner";
+
+// API fetch function
+const fetchReportsData = async (timeRange: string) => {
+  const response = await fetch(`/api/reports?timeRange=${timeRange}`);
+  if (!response.ok) throw new Error('Failed to fetch reports data');
+  return response.json();
+};
 
 export default function ReportsPage() {
   const [timeRange, setTimeRange] = useState("30d");
 
-  // Generate sample data for charts
-  const monthlyRevenueData = [
-    { month: 'Jan', revenue: 28400, turns: 22, avgCost: 1290 },
-    { month: 'Feb', revenue: 32100, turns: 26, avgCost: 1235 },
-    { month: 'Mar', revenue: 29800, turns: 24, avgCost: 1242 },
-    { month: 'Apr', revenue: 35600, turns: 28, avgCost: 1271 },
-    { month: 'May', revenue: 31200, turns: 25, avgCost: 1248 },
-    { month: 'Jun', revenue: 34800, turns: 29, avgCost: 1200 },
-  ];
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['reports', timeRange],
+    queryFn: () => fetchReportsData(timeRange),
+    refetchInterval: 60000, // Refetch every minute
+  });
 
-  const turnStatusData = [
-    { name: 'Completed', value: 145, color: '#22c55e' },
-    { name: 'In Progress', value: 12, color: '#f97316' },
-    { name: 'Pending', value: 8, color: '#eab308' },
-    { name: 'Overdue', value: 3, color: '#ef4444' },
-  ];
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount);
+  };
 
-  const vendorPerformanceData = mockVendors.map(vendor => ({
-    name: vendor.companyName.split(' ')[0], // First word for brevity
-    rating: vendor.rating,
-    onTimeRate: vendor.onTimeRate,
-    jobs: vendor.completedJobs,
-    avgCost: vendor.averageCost,
-  })).slice(0, 5);
+  const formatDate = (timestamp: number) => {
+    return format(new Date(timestamp), 'MMM d, yyyy');
+  };
 
-  const propertyTypeData = [
-    { type: 'Apartment', count: 18, revenue: 38400 },
-    { type: 'House', count: 15, revenue: 45600 },
-    { type: 'Condo', count: 12, revenue: 27600 },
-    { type: 'Commercial', count: 2, revenue: 12800 },
-  ];
+  const exportToCSV = () => {
+    if (!data) return;
 
-  const turnTrendData = [
-    { week: 'W1', completed: 6, started: 8, overdue: 1 },
-    { week: 'W2', completed: 7, started: 6, overdue: 0 },
-    { week: 'W3', completed: 8, started: 9, overdue: 2 },
-    { week: 'W4', completed: 5, started: 7, overdue: 1 },
-  ];
+    const headers = ["Metric", "Value", "Trend"];
+    const csvContent = [
+      headers.join(","),
+      ["Total Revenue", data.metrics.totalRevenue, `${data.metrics.revenueTrend}%`].join(","),
+      ["Completed Turns", data.metrics.completedTurns, `${data.metrics.completedTrend}%`].join(","),
+      ["Avg Cost Per Turn", data.metrics.avgCostPerTurn, `${data.metrics.costTrend}%`].join(","),
+      ["Completion Rate", `${data.metrics.completionRate}%`, ""].join(","),
+    ].join("\n");
 
-  const topPerformingVendors = mockVendors
-    .sort((a, b) => (b.rating * b.onTimeRate) - (a.rating * a.onTimeRate))
-    .slice(0, 5);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reports-${format(new Date(), "yyyy-MM-dd")}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Report exported successfully");
+  };
 
-  const upcomingExpirations = mockVendors
-    .filter(vendor => {
-      const expiry = new Date(vendor.insuranceExpiry);
-      const now = new Date();
-      const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      return daysUntilExpiry <= 90 && daysUntilExpiry > 0;
-    })
-    .sort((a, b) => new Date(a.insuranceExpiry).getTime() - new Date(b.insuranceExpiry).getTime())
-    .slice(0, 5);
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+          <IconLoader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="text-center text-red-600 p-8">
+          Error loading reports: {error instanceof Error ? error.message : 'Unknown error'}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const {
+    metrics,
+    monthlyData,
+    statusDistribution,
+    vendorPerformance,
+    propertyTypeData,
+    weeklyTrends,
+    topVendors,
+    expirationAlerts
+  } = data || {
+    metrics: {
+      totalRevenue: 0,
+      completedTurns: 0,
+      avgCostPerTurn: 0,
+      completionRate: 0,
+      revenueTrend: 0,
+      completedTrend: 0,
+      costTrend: 0,
+      avgTurnTime: 0
+    },
+    monthlyData: [],
+    statusDistribution: [],
+    vendorPerformance: [],
+    propertyTypeData: [],
+    weeklyTrends: [],
+    topVendors: [],
+    expirationAlerts: []
+  };
+
+  const getTrendIcon = (trend: number) => {
+    if (trend > 0) return <IconTrendingUp className="mr-1 h-3 w-3 text-green-500" />;
+    if (trend < 0) return <IconTrendingDown className="mr-1 h-3 w-3 text-red-500" />;
+    return <IconMinus className="mr-1 h-3 w-3 text-gray-500" />;
+  };
+
+  const getTrendColor = (trend: number) => {
+    if (trend > 0) return "text-green-600";
+    if (trend < 0) return "text-red-600";
+    return "text-gray-600";
+  };
 
   return (
     <DashboardLayout>
@@ -132,7 +187,18 @@ export default function ReportsPage() {
                 <SelectItem value="1y">Last year</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => refetch()}
+              size="icon"
+            >
+              <IconRefresh className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex items-center gap-2"
+              onClick={exportToCSV}
+            >
               <IconDownload className="h-4 w-4" />
               Export
             </Button>
@@ -147,10 +213,12 @@ export default function ReportsPage() {
               <IconCurrencyDollar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(mockDashboardMetrics.totalRevenue)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(metrics.totalRevenue)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <IconTrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                <span className="text-green-600">↑ 12%</span>
+                {getTrendIcon(metrics.revenueTrend)}
+                <span className={getTrendColor(metrics.revenueTrend)}>
+                  {metrics.revenueTrend > 0 ? '↑' : metrics.revenueTrend < 0 ? '↓' : ''} {Math.abs(metrics.revenueTrend)}%
+                </span>
                 <span className="ml-1">from last period</span>
               </div>
             </CardContent>
@@ -162,11 +230,13 @@ export default function ReportsPage() {
               <IconRefresh className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockDashboardMetrics.completedTurnsThisMonth}</div>
+              <div className="text-2xl font-bold">{metrics.completedTurns}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <IconTrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                <span className="text-green-600">↑ 8%</span>
-                <span className="ml-1">from last month</span>
+                {getTrendIcon(metrics.completedTrend)}
+                <span className={getTrendColor(metrics.completedTrend)}>
+                  {metrics.completedTrend > 0 ? '↑' : metrics.completedTrend < 0 ? '↓' : ''} {Math.abs(metrics.completedTrend)}%
+                </span>
+                <span className="ml-1">from last period</span>
               </div>
             </CardContent>
           </Card>
@@ -177,11 +247,13 @@ export default function ReportsPage() {
               <IconChartBar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(mockDashboardMetrics.avgCostPerTurn)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(metrics.avgCostPerTurn)}</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <IconTrendingDown className="mr-1 h-3 w-3 text-red-500" />
-                <span className="text-red-600">↓ 3%</span>
-                <span className="ml-1">cost reduction</span>
+                {getTrendIcon(-metrics.costTrend)} {/* Negative because lower cost is better */}
+                <span className={metrics.costTrend < 0 ? "text-green-600" : metrics.costTrend > 0 ? "text-red-600" : "text-gray-600"}>
+                  {metrics.costTrend < 0 ? '↓' : metrics.costTrend > 0 ? '↑' : ''} {Math.abs(metrics.costTrend)}%
+                </span>
+                <span className="ml-1">cost {metrics.costTrend < 0 ? 'reduction' : 'increase'}</span>
               </div>
             </CardContent>
           </Card>
@@ -192,11 +264,9 @@ export default function ReportsPage() {
               <IconClock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockDashboardMetrics.completionRate}%</div>
+              <div className="text-2xl font-bold">{metrics.completionRate}%</div>
               <div className="flex items-center text-xs text-muted-foreground">
-                <IconTrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                <span className="text-green-600">↑ 2%</span>
-                <span className="ml-1">improvement</span>
+                <span>Avg turn time: {metrics.avgTurnTime > 0 ? `${metrics.avgTurnTime.toFixed(1)} days` : 'N/A'}</span>
               </div>
             </CardContent>
           </Card>
@@ -213,52 +283,58 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={monthlyRevenueData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis 
-                      dataKey="month" 
-                      className="text-xs fill-muted-foreground"
-                    />
-                    <YAxis 
-                      yAxisId="revenue"
-                      orientation="left"
-                      className="text-xs fill-muted-foreground"
-                      tickFormatter={(value) => `$${(value/1000).toFixed(0)}k`}
-                    />
-                    <YAxis 
-                      yAxisId="turns"
-                      orientation="right"
-                      className="text-xs fill-muted-foreground"
-                    />
-                    <Tooltip 
-                      formatter={(value, name) => [
-                        name === 'revenue' ? formatCurrency(value as number) : value,
-                        name === 'revenue' ? 'Revenue' : 'Turns'
-                      ]}
-                      labelFormatter={(label) => `Month: ${label}`}
-                    />
-                    <Area
-                      yAxisId="revenue"
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#3b82f6"
-                      fill="#3b82f6"
-                      fillOpacity={0.1}
-                      strokeWidth={2}
-                    />
-                    <Line
-                      yAxisId="turns"
-                      type="monotone"
-                      dataKey="turns"
-                      stroke="#f59e0b"
-                      strokeWidth={2}
-                      dot={{ fill: '#f59e0b', r: 4 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              {monthlyData.length > 0 ? (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis 
+                        dataKey="month" 
+                        className="text-xs fill-muted-foreground"
+                      />
+                      <YAxis 
+                        yAxisId="revenue"
+                        orientation="left"
+                        className="text-xs fill-muted-foreground"
+                        tickFormatter={(value) => `$${(value/1000).toFixed(0)}k`}
+                      />
+                      <YAxis 
+                        yAxisId="turns"
+                        orientation="right"
+                        className="text-xs fill-muted-foreground"
+                      />
+                      <Tooltip 
+                        formatter={(value: any, name: any) => [
+                          name === 'revenue' ? formatCurrency(value) : value,
+                          name === 'revenue' ? 'Revenue' : 'Turns'
+                        ]}
+                        labelFormatter={(label) => `Month: ${label}`}
+                      />
+                      <Area
+                        yAxisId="revenue"
+                        type="monotone"
+                        dataKey="revenue"
+                        stroke="#3b82f6"
+                        fill="#3b82f6"
+                        fillOpacity={0.1}
+                        strokeWidth={2}
+                      />
+                      <Line
+                        yAxisId="turns"
+                        type="monotone"
+                        dataKey="turns"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        dot={{ fill: '#f59e0b', r: 4 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-80 flex items-center justify-center text-muted-foreground">
+                  No data available for the selected period
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -271,40 +347,48 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={turnStatusData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={120}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {turnStatusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [value, 'Turns']} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-4 space-y-2">
-                {turnStatusData.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-sm">{item.name}</span>
-                    </div>
-                    <span className="font-medium">{item.value}</span>
+              {statusDistribution.filter(s => s.value > 0).length > 0 ? (
+                <>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={statusDistribution.filter(s => s.value > 0)}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={120}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {statusDistribution.filter(s => s.value > 0).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => [value, 'Turns']} />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
-              </div>
+                  <div className="mt-4 space-y-2">
+                    {statusDistribution.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: item.color }}
+                          />
+                          <span className="text-sm">{item.name}</span>
+                        </div>
+                        <span className="font-medium">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="h-80 flex items-center justify-center text-muted-foreground">
+                  No turn data available
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -313,34 +397,41 @@ export default function ReportsPage() {
             <CardHeader>
               <CardTitle>Vendor Performance</CardTitle>
               <CardDescription>
-                Top vendors by rating and on-time delivery
+                Top vendors by on-time delivery rate
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={vendorPerformanceData} layout="horizontal">
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis 
-                      type="number" 
-                      className="text-xs fill-muted-foreground"
-                      domain={[80, 100]}
-                    />
-                    <YAxis 
-                      type="category" 
-                      dataKey="name" 
-                      className="text-xs fill-muted-foreground"
-                    />
-                    <Tooltip 
-                      formatter={(value, name) => [
-                        `${value}${name === 'onTimeRate' ? '%' : ''}`,
-                        name === 'onTimeRate' ? 'On-Time Rate' : 'Rating'
-                      ]}
-                    />
-                    <Bar dataKey="onTimeRate" fill="#22c55e" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              {vendorPerformance.length > 0 ? (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={vendorPerformance.slice(0, 5)} layout="horizontal">
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis 
+                        type="number" 
+                        className="text-xs fill-muted-foreground"
+                        domain={[0, 100]}
+                      />
+                      <YAxis 
+                        type="category" 
+                        dataKey="name" 
+                        className="text-xs fill-muted-foreground"
+                        width={100}
+                      />
+                      <Tooltip 
+                        formatter={(value: any, name: any) => [
+                          `${value}%`,
+                          'On-Time Rate'
+                        ]}
+                      />
+                      <Bar dataKey="onTimeRate" fill="#22c55e" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-80 flex items-center justify-center text-muted-foreground">
+                  No vendor performance data available
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -359,22 +450,28 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {topPerformingVendors.map((vendor, index) => (
-                  <div key={vendor.id} className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="font-medium">{vendor.companyName}</div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Rating: {vendor.rating}</span>
-                        <span>On-time: {vendor.onTimeRate}%</span>
+              {topVendors.length > 0 ? (
+                <div className="space-y-4">
+                  {topVendors.map((vendor: any, index: number) => (
+                    <div key={vendor.id} className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-medium">{vendor.name}</div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>Rating: {vendor.rating.toFixed(1)}</span>
+                          <span>On-time: {vendor.onTimeRate}%</span>
+                        </div>
                       </div>
+                      <Badge variant={index === 0 ? "default" : "secondary"}>
+                        #{index + 1}
+                      </Badge>
                     </div>
-                    <Badge variant={index === 0 ? "default" : "secondary"}>
-                      #{index + 1}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-6">
+                  No vendor data available
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -390,28 +487,34 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {propertyTypeData.map((type) => (
-                  <div key={type.type} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{type.type}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {type.count} properties
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>Revenue</span>
-                        <span className="font-medium">{formatCurrency(type.revenue)}</span>
+              {propertyTypeData.length > 0 ? (
+                <div className="space-y-4">
+                  {propertyTypeData.map((type: any) => (
+                    <div key={type.type} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{type.type}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {type.count} properties
+                        </span>
                       </div>
-                      <Progress 
-                        value={(type.revenue / 50000) * 100} 
-                        className="h-2" 
-                      />
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span>Revenue</span>
+                          <span className="font-medium">{formatCurrency(type.revenue)}</span>
+                        </div>
+                        <Progress 
+                          value={Math.min((type.revenue / 50000) * 100, 100)} 
+                          className="h-2" 
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-6">
+                  No property type data available
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -427,31 +530,24 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {upcomingExpirations.length > 0 ? (
+              {expirationAlerts.length > 0 ? (
                 <div className="space-y-3">
-                  {upcomingExpirations.map((vendor) => {
-                    const daysUntilExpiry = Math.ceil(
-                      (new Date(vendor.insuranceExpiry).getTime() - new Date().getTime()) / 
-                      (1000 * 60 * 60 * 24)
-                    );
-                    
-                    return (
-                      <div key={vendor.id} className="flex items-center justify-between p-3 bg-orange-50 border border-orange-200 rounded">
-                        <div className="space-y-1">
-                          <div className="font-medium text-sm">{vendor.companyName}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Expires: {formatDate(vendor.insuranceExpiry)}
-                          </div>
+                  {expirationAlerts.map((vendor: any) => (
+                    <div key={vendor.id} className="flex items-center justify-between p-3 bg-orange-50 border border-orange-200 rounded">
+                      <div className="space-y-1">
+                        <div className="font-medium text-sm">{vendor.companyName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Expires: {formatDate(vendor.insuranceExpiry)}
                         </div>
-                        <Badge 
-                          variant={daysUntilExpiry <= 30 ? "destructive" : "secondary"}
-                          className="text-xs"
-                        >
-                          {daysUntilExpiry} days
-                        </Badge>
                       </div>
-                    );
-                  })}
+                      <Badge 
+                        variant={vendor.daysUntilExpiry <= 30 ? "destructive" : "secondary"}
+                        className="text-xs"
+                      >
+                        {vendor.daysUntilExpiry} days
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="text-center text-muted-foreground py-6">
@@ -463,7 +559,7 @@ export default function ReportsPage() {
           </Card>
         </div>
 
-        {/* Recent Activity Summary */}
+        {/* Weekly Turn Trends */}
         <Card>
           <CardHeader>
             <CardTitle>Turn Trend Analysis</CardTitle>
@@ -472,24 +568,30 @@ export default function ReportsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={turnTrendData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis 
-                    dataKey="week" 
-                    className="text-xs fill-muted-foreground"
-                  />
-                  <YAxis 
-                    className="text-xs fill-muted-foreground"
-                  />
-                  <Tooltip />
-                  <Bar dataKey="completed" fill="#22c55e" name="Completed" />
-                  <Bar dataKey="started" fill="#3b82f6" name="Started" />
-                  <Bar dataKey="overdue" fill="#ef4444" name="Overdue" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {weeklyTrends.length > 0 ? (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weeklyTrends}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="week" 
+                      className="text-xs fill-muted-foreground"
+                    />
+                    <YAxis 
+                      className="text-xs fill-muted-foreground"
+                    />
+                    <Tooltip />
+                    <Bar dataKey="completed" fill="#22c55e" name="Completed" />
+                    <Bar dataKey="started" fill="#3b82f6" name="Started" />
+                    <Bar dataKey="overdue" fill="#ef4444" name="Overdue" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
+                No weekly trend data available
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
