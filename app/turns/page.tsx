@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   IconSearch,
   IconPlus,
@@ -164,6 +165,7 @@ const updateTurnStage = async ({ turnId, updates }: { turnId: string; updates: a
 
 export default function TurnsPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterStage, setFilterStage] = useState("all");
@@ -681,7 +683,7 @@ export default function TurnsPage() {
                         key={turnData.turn.id}
                         className="cursor-pointer hover:shadow-md transition-shadow"
                         onClick={() => {
-                          // Handle card click - could open detail view
+                          router.push(`/turns/${turnData.turn.id}`);
                         }}
                       >
                         <CardContent className="p-4 space-y-3">
