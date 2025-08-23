@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { turns, turnHistory } from "@/lib/db/schema";
+import { turns, turnHistory, vendors, properties } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { auditService } from "@/lib/audit-service";
+import { sendVendorAssignmentNotification } from "@/lib/email/notifications";
 
 // GET - Get single turn
 export async function GET(
@@ -229,6 +230,39 @@ export async function PUT(
         comment: body.comment || 'Stage updated',
         changedData: body,
       });
+    }
+
+    // Send vendor assignment notification if vendor was newly assigned
+    if (body.vendorId && body.vendorId !== currentTurn[0].vendorId) {
+      try {
+        // Get vendor and property details
+        const [vendor] = await db
+          .select()
+          .from(vendors)
+          .where(eq(vendors.id, body.vendorId))
+          .limit(1);
+
+        const [property] = await db
+          .select()
+          .from(properties)
+          .where(eq(properties.id, updatedTurn[0].propertyId))
+          .limit(1);
+
+        if (vendor && property) {
+          await sendVendorAssignmentNotification({
+            turnId: updatedTurn[0].turnNumber || id,
+            propertyAddress: `${property.address}, ${property.city}, ${property.state} ${property.zipCode}`,
+            estimatedCost: parseFloat(updatedTurn[0].estimatedCost || '0'),
+            priority: updatedTurn[0].priority || 'MEDIUM',
+            vendorEmail: vendor.email,
+            vendorName: vendor.name,
+            dueDate: updatedTurn[0].turnDueDate ? new Date(updatedTurn[0].turnDueDate).toLocaleDateString() : undefined,
+          });
+        }
+      } catch (emailError) {
+        console.error('Failed to send vendor assignment email:', emailError);
+        // Don't fail the request if email fails
+      }
     }
 
     // Log the update

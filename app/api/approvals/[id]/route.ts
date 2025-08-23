@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { approvals, turns, user } from "@/lib/db/schema";
+import { approvals, turns, user, properties } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getSession } from "@/lib/auth-helpers";
 import { logActivity } from "@/lib/audit-service";
+import { sendApprovalDecisionNotification } from "@/lib/email/notifications";
 
 // GET /api/approvals/[id] - Get a specific approval
 export async function GET(
@@ -145,7 +146,43 @@ export async function PUT(
       updatedApproval
     );
 
-    // TODO: Send email notification to relevant parties
+    // Send email notification
+    try {
+      // Get turn with property details
+      const [turnWithProperty] = await db
+        .select({
+          turn: turns,
+          property: properties,
+        })
+        .from(turns)
+        .innerJoin(properties, eq(turns.propertyId, properties.id))
+        .where(eq(turns.id, currentApproval.turnId))
+        .limit(1);
+
+      // Get the original requester
+      const [requester] = await db
+        .select()
+        .from(user)
+        .where(eq(user.id, currentApproval.requestedBy))
+        .limit(1);
+
+      if (requester && turnWithProperty) {
+        await sendApprovalDecisionNotification({
+          turnId: currentApproval.turnId,
+          propertyAddress: `${turnWithProperty.property.address}, ${turnWithProperty.property.city}, ${turnWithProperty.property.state} ${turnWithProperty.property.zipCode}`,
+          estimatedCost: parseFloat(currentApproval.amount || '0'),
+          priority: turnWithProperty.turn.priority || 'MEDIUM',
+          recipientEmail: requester.email,
+          recipientName: requester.name || requester.email,
+          decision: action === 'approve' ? 'APPROVED' : 'REJECTED',
+          approverName: session.user.name || session.user.email || 'Approver',
+          comments: action === 'reject' ? rejectionReason : undefined,
+        });
+      }
+    } catch (emailError) {
+      console.error('Failed to send approval decision email:', emailError);
+      // Don't fail the request if email fails
+    }
 
     return NextResponse.json(updatedApproval);
   } catch (error) {

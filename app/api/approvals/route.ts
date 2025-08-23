@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { approvals, turns, approvalThresholds } from "@/lib/db/schema";
+import { approvals, turns, approvalThresholds, user, properties } from "@/lib/db/schema";
 import { eq, and, gte, or, lte, desc } from "drizzle-orm";
 import { getSession } from "@/lib/auth-helpers";
 import { logActivity } from "@/lib/audit-service";
+import { sendApprovalRequestNotification, sendBulkApprovalRequests } from "@/lib/email/notifications";
 
 // GET /api/approvals - Get all approvals or filter by turn/status
 export async function GET(request: NextRequest) {
@@ -126,6 +127,53 @@ export async function POST(request: NextRequest) {
       .insert(approvals)
       .values(approvalsToCreate)
       .returning();
+
+    // Get turn with property details for email
+    const [turnWithProperty] = await db
+      .select({
+        turn: turns,
+        property: properties,
+      })
+      .from(turns)
+      .innerJoin(properties, eq(turns.propertyId, properties.id))
+      .where(eq(turns.id, turnId))
+      .limit(1);
+
+    // Send email notifications to approvers
+    try {
+      // Get approvers based on approval types
+      const approverRoles: string[] = [];
+      if (approvalsToCreate.some(a => a.type === 'dfo')) {
+        approverRoles.push('DFO_APPROVER');
+      }
+      if (approvalsToCreate.some(a => a.type === 'ho')) {
+        approverRoles.push('HO_APPROVER');
+      }
+
+      // Get users with approver roles
+      const approverUsers = await db
+        .select()
+        .from(user)
+        .where(
+          or(...approverRoles.map(role => eq(user.role, role as any)))
+        );
+
+      // Send notifications to each approver
+      for (const approver of approverUsers) {
+        await sendApprovalRequestNotification({
+          turnId: turnId,
+          propertyAddress: `${turnWithProperty.property.address}, ${turnWithProperty.property.city}, ${turnWithProperty.property.state} ${turnWithProperty.property.zipCode}`,
+          estimatedCost: parseFloat(amount),
+          priority: turnWithProperty.turn.priority || 'MEDIUM',
+          approverEmail: approver.email,
+          approverName: approver.name || approver.email,
+          submitterName: session.user.name || session.user.email || 'System',
+        });
+      }
+    } catch (emailError) {
+      console.error('Failed to send approval email notifications:', emailError);
+      // Don't fail the request if email fails
+    }
 
     // Update the turn to indicate approval is needed
     const needsDfo = approvalsToCreate.some(a => a.type === 'dfo');
