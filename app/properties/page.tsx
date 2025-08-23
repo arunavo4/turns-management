@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Fuse from "fuse.js";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import {
   IconSearch,
@@ -143,14 +144,62 @@ export default function PropertiesPage() {
     });
   };
 
+  // Setup Fuse.js for fuzzy search - only for small datasets
+  // For large datasets (>100 items), use server-side search instead
+  const fuse = useMemo(() => {
+    // Prevent memory issues with large datasets
+    if (properties.length > 100) {
+      console.warn('Dataset too large for client-side search. Consider using server-side search.');
+      return null;
+    }
+    
+    return new Fuse(properties, {
+      keys: [
+        { name: "name", weight: 0.3 },
+        { name: "address", weight: 0.3 },
+        { name: "city", weight: 0.2 },
+        { name: "unitNumber", weight: 0.1 },
+        { name: "type", weight: 0.1 },
+      ],
+      threshold: 0.3,
+      includeScore: true,
+      useExtendedSearch: true,
+      // Limit search results to prevent memory issues
+      shouldSort: true,
+      minMatchCharLength: 2,
+    });
+  }, [properties]);
+
   // Filter properties based on search and filters
-  const filteredProperties = properties.filter((property) => {
-    const matchesSearch = property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.address.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || property.status === statusFilter;
-    const matchesType = typeFilter === "all" || property.type === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
-  });
+  const filteredProperties = useMemo(() => {
+    let filtered = properties;
+
+    // Apply fuzzy search if there's a search term and Fuse is available
+    if (searchTerm.trim() && fuse) {
+      const searchResults = fuse.search(searchTerm);
+      filtered = searchResults.map((result) => result.item);
+    } else if (searchTerm.trim()) {
+      // Fallback to simple filter for large datasets
+      const term = searchTerm.toLowerCase();
+      filtered = properties.filter((property) => 
+        property.name.toLowerCase().includes(term) ||
+        property.address.toLowerCase().includes(term) ||
+        property.city?.toLowerCase().includes(term)
+      );
+    }
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((property) => property.status === statusFilter);
+    }
+
+    // Apply type filter
+    if (typeFilter !== "all") {
+      filtered = filtered.filter((property) => property.type === typeFilter);
+    }
+
+    return filtered;
+  }, [properties, searchTerm, statusFilter, typeFilter, fuse]);
 
   const getPropertyIcon = (type: string) => {
     switch (type) {
@@ -234,11 +283,19 @@ export default function PropertiesPage() {
                 <div className="relative">
                   <IconSearch className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search properties..."
-                    className="pl-9"
+                    placeholder="Search by name, address, city..."
+                    className="pl-9 pr-12"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
+                  {searchTerm && (
+                    <button
+                      className="absolute right-2 top-2.5 text-xs text-muted-foreground hover:text-foreground px-2 py-0.5 hover:bg-accent rounded"
+                      onClick={() => setSearchTerm("")}
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">

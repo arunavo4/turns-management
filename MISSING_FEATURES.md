@@ -18,30 +18,38 @@ This document tracks features that exist in the old Odoo platform (`/decyphr_tur
 - Vendors page with detail, edit, and create functionality
 - Basic Dashboard with metrics
 - Basic Turns Kanban board
-- Audit logs backend (API + Service) - **BUT NO UI**
+- Audit logs backend (API + Service) with full UI
 - React Query integration for optimistic updates
+- User profile system with real user data
+- Settings page with preferences management
+- Global search functionality with PostgreSQL full-text search
+- Approval workflow backend (database schema + API endpoints)
 
 ⚠️ **Partially Implemented:**
-- Audit logging system (backend only, no UI page)
+- Approval workflow system (backend complete, UI pending)
+- Global search (basic version complete, advanced PostgreSQL FTS prepared)
 
 ---
 
 ## 🔴 Critical Features (Phase 1) - From Odoo
 
-### 1. Approval Workflow System ❌
+### 1. Approval Workflow System 🔄
 **Priority: CRITICAL**
-- [ ] DFO approval workflow (threshold-based: >$3000)
-- [ ] HO approval workflow (higher amounts: >$10000)
-- [ ] Approval thresholds configuration
-- [ ] Approval timestamps tracking
-- [ ] Approval user tracking
-- [ ] Rejection reasons wizard
+- [x] DFO approval workflow (threshold-based: $3000-$9999)
+- [x] HO approval workflow (higher amounts: >$10000)
+- [x] Approval thresholds configuration (database table + seeding)
+- [x] Approval timestamps tracking
+- [x] Approval user tracking
+- [x] Rejection reasons in API
 - [ ] Approval status indicators in UI
-- [ ] Scope approval states:
-  - `dfo_approval_needed`
-  - `dfo_approved`
-  - `ho_approval_needed`
-  - `ho_approved`
+- [x] Approval database schema:
+  - `approvals` table with full tracking
+  - `approval_thresholds` table for configuration
+  - Status enum: pending, approved, rejected, cancelled
+- [x] API endpoints:
+  - GET/POST `/api/approvals`
+  - GET/PUT/DELETE `/api/approvals/[id]`
+  - CRUD `/api/approval-thresholds`
 
 **Odoo Implementation Reference:**
 - File: `turns_management/models/turns_management.py`
@@ -319,6 +327,50 @@ await resend.emails.send({
 
 ---
 
+## 🟠 Scalability & Performance Features (Critical for Production)
+
+### 17. Scalable Search & Pagination ✅ READY
+**Priority: CRITICAL for large datasets**
+- [x] Server-side search API endpoint with pagination
+- [x] Database query optimization with proper indexes  
+- [x] Custom `useServerSearch` hook with debouncing
+- [x] Optimized properties page (`/properties/optimized`)
+- [ ] Apply to vendors page
+- [ ] Apply to turns page
+- [ ] PostgreSQL full-text search migration
+- [ ] PostgreSQL trigram search for fuzzy matching
+- [ ] Redis caching layer for popular searches
+- [ ] Elasticsearch/Algolia integration for instant search
+
+**Current Implementation:**
+- Basic ILIKE search works for small datasets
+- Server-side pagination limits data transfer
+- React Query caching reduces server load
+- Debounced search prevents excessive API calls
+
+**Production Optimizations Needed:**
+```sql
+-- Add GIN indexes for fast search
+CREATE INDEX idx_properties_search ON properties 
+USING GIN (to_tsvector('english', name || ' ' || address || ' ' || city));
+
+-- Enable trigram for fuzzy search
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX trgm_idx ON properties USING GIN (name gin_trgm_ops);
+```
+
+**Performance Targets:**
+- Handle 100,000+ properties with <100ms search response
+- Support concurrent searches from 1000+ users
+- Maintain 99.9% uptime with proper caching
+
+**Files Created:**
+- `/app/api/properties/search/route.ts` - Server-side search endpoint
+- `/hooks/use-server-search.ts` - Reusable search hook
+- `/app/properties/optimized/page.tsx` - Scalable properties page
+
+---
+
 ## 🔵 Minor Features (Phase 4) - From Odoo
 
 ### 12. Turn Numbering Sequence ❌
@@ -386,11 +438,11 @@ await resend.emails.send({
 
 | Phase | Total Features | Completed | In Progress | Not Started | Progress |
 |-------|---------------|-----------|-------------|-------------|----------|
-| Phase 1 (Critical) | 4 | 1 | 0 | 3 | 25% |
+| Phase 1 (Critical) | 4 | 1 | 1 | 2 | 37% |
 | Phase 2 (Important) | 4 | 0 | 0 | 4 | 0% |
 | Phase 3 (Enhancement) | 4 | 0 | 0 | 4 | 0% |
 | Phase 4 (Minor) | 5 | 0 | 0 | 5 | 0% |
-| **Total** | **17** | **1** | **0** | **16** | **6%** |
+| **Total** | **17** | **1** | **1** | **15** | **9%** |
 
 ---
 
@@ -419,6 +471,8 @@ Many required fields and tables already exist in the schema but lack UI implemen
 - React Query cache not optimized for complex workflows
 - ✅ **Fixed:** Better Auth session handling (using auth-helpers with proper getSession)
 - ✅ **Fixed:** Database insert issues (propertyId generation and nullable userId in audit logs)
+- ✅ **Fixed:** User profile/settings not showing real user data
+- ✅ **Fixed:** Navigation showing mock data instead of session data
 
 ### Dependencies Needed
 - **Email Service**: ✅ **Resend** (decided) - for all email notifications
@@ -460,13 +514,51 @@ Many required fields and tables already exist in the schema but lack UI implemen
 
 ## 🔧 Next Immediate Steps
 
-1. **Start with Approval Workflow** - Most critical missing feature
-2. **Add scope_approval field to turns table** via migration
-3. **Create approval UI components** in turn details
-4. **Implement email service** for notifications
-5. **Add stage transition logic** to kanban board
+1. ✅ **DONE: Approval Workflow Backend** - Database schema and API endpoints completed
+2. **Create approval UI components** in turn details (remaining UI work)
+3. **Implement email service** for notifications using Resend
+4. **Add stage transition logic** to kanban board
+5. **Create workflow configuration page** for admin users
 
 ---
 
-*Last Updated: December 2024*
+## 🆕 Recently Completed Features
+
+### Global Search System ✅
+**Completed: January 2025**
+- [x] Basic search API with ILIKE pattern matching
+- [x] Search across properties, turns, vendors, and users
+- [x] Global search component with dropdown results
+- [x] Keyboard shortcut support (Cmd/Ctrl + K)
+- [x] Mobile-responsive search with sheet modal
+- [x] Debounced search input
+- [x] Advanced PostgreSQL full-text search prepared (optional upgrade)
+  - Full-text search vectors with weighted ranking
+  - Trigram similarity for typo tolerance
+  - Database migration script ready
+
+### User Profile & Settings ✅
+**Completed: January 2025**
+- [x] Profile page with real user data from Better Auth
+- [x] Settings page restructured (removed duplicate profile section)
+- [x] User preferences API and storage
+- [x] Password change functionality
+- [x] Navigation showing real session data (no more mock data)
+- [x] Profile statistics and activity tracking
+
+### Approval Workflow Backend ✅
+**Completed: January 2025**
+- [x] Complete database schema for approvals
+- [x] Approval thresholds configuration table
+- [x] Full CRUD API for approvals and thresholds
+- [x] DFO approval ($3000-$9999.99)
+- [x] HO approval ($10000+)
+- [x] Sequential approval support
+- [x] Rejection reason tracking
+- [x] Audit logging integration
+- [x] Seed data for default thresholds
+
+---
+
+*Last Updated: January 2025*
 *Odoo reference path: `/Users/arunavoray/Documents/Development/Decyphr/TurnsManagement/decyphr_turns`*

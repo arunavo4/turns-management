@@ -11,9 +11,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Properties don't change frequently, so we can cache longer
-            staleTime: 5 * 60 * 1000, // 5 minutes - data remains fresh
-            gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache
+            // Reduced cache times to prevent memory buildup
+            staleTime: 1 * 60 * 1000, // 1 minute - data remains fresh
+            gcTime: 2 * 60 * 1000, // 2 minutes - garbage collect unused queries
             retry: 2, // Retry failed requests twice
             refetchOnWindowFocus: false, // Don't refetch on tab focus
             refetchOnMount: true, // Refetch if stale when component mounts

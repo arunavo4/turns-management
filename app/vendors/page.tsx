@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Fuse from "fuse.js";
 import DashboardLayout from "@/components/layout/dashboard-layout"
 import {
   IconSearch,
@@ -158,21 +159,64 @@ export default function VendorsPage() {
     new Set(vendors.flatMap(vendor => vendor.specialties || []))
   ).sort();
 
-  const filteredVendors = vendors.filter((vendor) => {
-    const matchesSearch = 
-      vendor.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (vendor.specialties || []).some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Setup Fuse.js for fuzzy search - only for small datasets
+  const fuse = useMemo(() => {
+    // Prevent memory issues with large datasets
+    if (vendors.length > 100) {
+      console.warn('Dataset too large for client-side search. Consider using server-side search.');
+      return null;
+    }
     
-    const matchesSpecialty = filterSpecialty === "all" || 
-      (vendor.specialties || []).includes(filterSpecialty);
-    
-    const matchesStatus = filterStatus === "all" || 
-      (filterStatus === "active" && vendor.isActive) ||
-      (filterStatus === "inactive" && !vendor.isActive);
-    
-    return matchesSearch && matchesSpecialty && matchesStatus;
-  });
+    return new Fuse(vendors, {
+      keys: [
+        { name: "companyName", weight: 0.35 },
+        { name: "contactName", weight: 0.35 },
+        { name: "email", weight: 0.15 },
+        { name: "phone", weight: 0.1 },
+        { name: "specialties", weight: 0.05 },
+      ],
+      threshold: 0.3,
+      includeScore: true,
+      useExtendedSearch: true,
+      shouldSort: true,
+      minMatchCharLength: 2,
+    });
+  }, [vendors]);
+
+  const filteredVendors = useMemo(() => {
+    let filtered = vendors;
+
+    // Apply fuzzy search if there's a search term and Fuse is available
+    if (searchQuery.trim() && fuse) {
+      const searchResults = fuse.search(searchQuery);
+      filtered = searchResults.map((result) => result.item);
+    } else if (searchQuery.trim()) {
+      // Fallback to simple filter for large datasets
+      const term = searchQuery.toLowerCase();
+      filtered = vendors.filter((vendor) => 
+        vendor.companyName.toLowerCase().includes(term) ||
+        vendor.contactName.toLowerCase().includes(term) ||
+        vendor.email?.toLowerCase().includes(term)
+      );
+    }
+
+    // Apply specialty filter
+    if (filterSpecialty !== "all") {
+      filtered = filtered.filter((vendor) => 
+        (vendor.specialties || []).includes(filterSpecialty)
+      );
+    }
+
+    // Apply status filter  
+    if (filterStatus !== "all") {
+      filtered = filtered.filter((vendor) => 
+        (filterStatus === "active" && vendor.isActive) ||
+        (filterStatus === "inactive" && !vendor.isActive)
+      );
+    }
+
+    return filtered;
+  }, [vendors, searchQuery, filterSpecialty, filterStatus, fuse]);
 
   const getPerformanceColor = (rate: string | null) => {
     const numRate = parseFloat(rate || "0");
@@ -449,11 +493,19 @@ export default function VendorsPage() {
               <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search vendors..."
-                className="pl-10"
+                placeholder="Search by company, contact, email..."
+                className="pl-10 pr-12"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              {searchQuery && (
+                <button
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground px-2 py-0.5 hover:bg-accent rounded"
+                  onClick={() => setSearchQuery("")}
+                >
+                  Clear
+                </button>
+              )}
             </div>
             <div className="flex gap-2">
             <Select value={filterSpecialty} onValueChange={setFilterSpecialty}>

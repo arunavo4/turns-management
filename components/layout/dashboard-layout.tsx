@@ -325,23 +325,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <IconMenu2 className="h-6 w-6" />
             </button>
 
-            {/* Search - Hidden on mobile, shown on larger screens */}
-            <div className="flex-1 max-w-lg hidden sm:block">
-              <div className="relative">
-                <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search properties, turns, vendors..."
-                  className="pl-10 bg-muted/50 h-11 w-full"
-                />
-              </div>
-            </div>
+            {/* Spacer */}
+            <div className="flex-1" />
 
             <div className="flex items-center space-x-1 sm:space-x-2">
-              {/* Search on mobile */}
-              <Button variant="ghost" size="icon" className="sm:hidden">
-                <IconSearch className="h-5 w-5" />
-              </Button>
               
               {/* Help - Hidden on mobile */}
               <Button variant="ghost" size="icon" className="hidden sm:inline-flex">
@@ -439,6 +426,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {children}
         </main>
       </div>
+
     </div>
   );
 }
