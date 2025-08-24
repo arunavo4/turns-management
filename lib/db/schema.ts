@@ -141,7 +141,13 @@ export const properties = pgTable('properties', {
   }),
   images: jsonb('images').default([]), // Array of image URLs
   notes: text('notes'),
-  color: integer('color').default(7) // Color coding for UI (7=green for core, 11=orange for non-core)
+  color: integer('color').default(7), // Color coding for UI (7=green for core, 11=orange for non-core)
+  
+  // Lock box fields
+  primaryLockBoxCode: varchar('primary_lock_box_code', { length: 50 }),
+  lockBoxLocation: varchar('lock_box_location', { length: 50 }), // 'front', 'back', 'left', 'right', 'other'
+  lockBoxInstallDate: bigint('lock_box_install_date', { mode: 'number' }),
+  lockBoxNotes: text('lock_box_notes')
 });
 
 // Audit Logs table for enterprise tracking
@@ -581,4 +587,80 @@ export const approvalsRelations = relations(approvals, ({ one }) => ({
     fields: [approvals.turnId],
     references: [turns.id]
   })
+}));
+
+// Utility bill status enum
+export const utilityBillStatusEnum = pgEnum('utility_bill_status', [
+  'paid',
+  'unpaid',
+  'overdue',
+  'disputed',
+  'partial'
+]);
+
+// Utility bill type enum
+export const utilityTypeEnum = pgEnum('utility_type', [
+  'power',
+  'gas',
+  'water',
+  'sewer',
+  'trash',
+  'internet',
+  'cable'
+]);
+
+// Property Utility Bills table
+export const propertyUtilityBills = pgTable('property_utility_bills', {
+  ...baseColumns,
+  propertyId: uuid('property_id').notNull().references(() => properties.id, { onDelete: 'cascade' }),
+  providerId: uuid('provider_id').references(() => utilityProviders.id),
+  utilityType: utilityTypeEnum('utility_type').notNull(),
+  
+  // Billing period
+  billingStartDate: bigint('billing_start_date', { mode: 'number' }).notNull(),
+  billingEndDate: bigint('billing_end_date', { mode: 'number' }).notNull(),
+  dueDate: bigint('due_date', { mode: 'number' }).notNull(),
+  
+  // Amounts
+  currentCharges: decimal('current_charges', { precision: 10, scale: 2 }).notNull(),
+  previousBalance: decimal('previous_balance', { precision: 10, scale: 2 }).default('0'),
+  lateFee: decimal('late_fee', { precision: 10, scale: 2 }).default('0'),
+  otherCharges: decimal('other_charges', { precision: 10, scale: 2 }).default('0'),
+  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
+  amountPaid: decimal('amount_paid', { precision: 10, scale: 2 }).default('0'),
+  
+  // Status and dates
+  status: utilityBillStatusEnum('status').default('unpaid').notNull(),
+  paidDate: bigint('paid_date', { mode: 'number' }),
+  
+  // Additional info
+  accountNumber: varchar('account_number', { length: 100 }),
+  meterReading: varchar('meter_reading', { length: 50 }),
+  usageAmount: decimal('usage_amount', { precision: 10, scale: 3 }),
+  usageUnit: varchar('usage_unit', { length: 20 }), // kWh, therms, gallons, etc.
+  
+  // File attachments
+  billDocument: text('bill_document'), // URL or file path
+  paymentConfirmation: text('payment_confirmation'), // URL or file path
+  
+  // Metadata
+  notes: text('notes'),
+  metadata: jsonb('metadata').default({})
+});
+
+// Relations for utility bills
+export const propertyUtilityBillsRelations = relations(propertyUtilityBills, ({ one }) => ({
+  property: one(properties, {
+    fields: [propertyUtilityBills.propertyId],
+    references: [properties.id]
+  }),
+  provider: one(utilityProviders, {
+    fields: [propertyUtilityBills.providerId],
+    references: [utilityProviders.id]
+  })
+}));
+
+// Update utility providers relations to include bills
+export const utilityProvidersRelations = relations(utilityProviders, ({ many }) => ({
+  bills: many(propertyUtilityBills)
 }));

@@ -22,6 +22,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconHistory,
+  IconBolt,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,6 +100,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       href: "/vendors", 
       icon: IconUsers, 
       badge: stats?.vendors || null
+    },
+    { 
+      name: "Utilities", 
+      href: "/utilities", 
+      icon: IconBolt, 
+      badge: null 
     },
     { 
       name: "Reports", 
