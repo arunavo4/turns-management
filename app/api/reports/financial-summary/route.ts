@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
           AVG(
             CASE 
               WHEN ${approvals.status} = 'approved' AND ${approvals.approvedAt} IS NOT NULL
-              THEN (${approvals.approvedAt}::bigint - ${approvals.createdAt}::bigint) / 3600000
+              THEN EXTRACT(EPOCH FROM (${approvals.approvedAt} - ${approvals.createdAt})) / 3600
               ELSE NULL
             END
           )
