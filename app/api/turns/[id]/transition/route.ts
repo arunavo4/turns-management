@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { turns, turnStages, turnStageHistory } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth-helpers";
 import { auditService } from "@/lib/audit-service";
 
@@ -81,7 +81,12 @@ export async function POST(
     }
 
     // Update turn with new stage and auto-status
-    const updateData: any = {
+    const updateData: {
+      stageId: string;
+      stageEnteredAt: number;
+      updatedAt: number;
+      status?: string;
+    } = {
       stageId: toStageId,
       stageEnteredAt: Date.now(),
       updatedAt: Date.now(),

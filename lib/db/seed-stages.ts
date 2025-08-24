@@ -27,6 +27,7 @@ async function seedStages() {
     const defaultStages = [
       {
         key: 'draft',
+        slug: 'draft',
         name: 'Draft',
         sequence: 1,
         color: '#6B7280', // gray
@@ -42,6 +43,7 @@ async function seedStages() {
       },
       {
         key: 'secure_property',
+        slug: 'secure-property',
         name: 'Secure Property',
         sequence: 2,
         color: '#EAB308', // yellow
@@ -57,6 +59,7 @@ async function seedStages() {
       },
       {
         key: 'inspection',
+        slug: 'inspection',
         name: 'Inspection',
         sequence: 3,
         color: '#3B82F6', // blue
@@ -72,6 +75,7 @@ async function seedStages() {
       },
       {
         key: 'scope_review',
+        slug: 'scope-review',
         name: 'Scope Review',
         sequence: 4,
         color: '#8B5CF6', // purple
@@ -87,6 +91,7 @@ async function seedStages() {
       },
       {
         key: 'vendor_assigned',
+        slug: 'vendor-assigned',
         name: 'Vendor Assigned',
         sequence: 5,
         color: '#6366F1', // indigo
@@ -102,6 +107,7 @@ async function seedStages() {
       },
       {
         key: 'in_progress',
+        slug: 'in-progress',
         name: 'In Progress',
         sequence: 6,
         color: '#F97316', // orange
@@ -117,6 +123,7 @@ async function seedStages() {
       },
       {
         key: 'change_order',
+        slug: 'change-order',
         name: 'Change Order',
         sequence: 7,
         color: '#F59E0B', // amber
@@ -132,6 +139,7 @@ async function seedStages() {
       },
       {
         key: 'turns_complete',
+        slug: 'turns-complete',
         name: 'Turns Complete',
         sequence: 8,
         color: '#10B981', // green
@@ -147,6 +155,7 @@ async function seedStages() {
       },
       {
         key: 'scan_360',
+        slug: 'scan-360',
         name: '360 Scan',
         sequence: 9,
         color: '#14B8A6', // teal

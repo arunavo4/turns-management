@@ -80,7 +80,7 @@ export default function AddPropertyModal({ onPropertyAdded }: AddPropertyModalPr
     images: [] as File[],
   });
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: string | number | boolean | File[]) => {
     setFormData(prev => ({
       ...prev,
       [field]: value

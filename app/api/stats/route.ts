@@ -19,11 +19,11 @@ export async function GET() {
     
     // Count active turns
     const activeTurns = allTurns.filter(
-      turn => turn.status !== 'completed' && turn.status !== 'cancelled'
+      (turn: any) => turn.status !== 'completed' && turn.status !== 'cancelled'
     );
     
     // Count approved vendors
-    const approvedVendors = allVendors.filter(vendor => vendor.isApproved);
+    const approvedVendors = allVendors.filter((vendor: any) => vendor.isApproved);
 
     return NextResponse.json({
       properties: allProperties.length,

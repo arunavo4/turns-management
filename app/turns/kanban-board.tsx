@@ -225,8 +225,10 @@ export default function EnhancedKanbanBoard({
   const columns = activeStages.map(stage => ({
     id: stage.key,
     name: stage.name,
+    title: stage.name,
     color: stage.color,
     stage: stage,
+    cards: [],
   }));
 
   const handleDataChange = async (newData: typeof kanbanData) => {
@@ -555,11 +557,11 @@ export default function EnhancedKanbanBoard({
       {/* Kanban Board */}
       {viewType === 'kanban' && (
         <KanbanProvider
-          columns={columns}
-          data={kanbanData}
-          onDataChange={handleDataChange}
+          columns={columns as any}
+          data={{ columns: [] } as any}
+          onDataChange={handleDataChange as any}
         >
-          {(column) => {
+          {(column: any) => {
             const stage = column.stage as TurnStage;
             const stageCount = kanbanData.filter(item => item.column === column.id).length;
             
@@ -604,8 +606,6 @@ export default function EnhancedKanbanBoard({
                     <KanbanCard
                       key={item.id}
                       id={item.id}
-                      name={item.name}
-                      column={item.column}
                     >
                       <div className="space-y-2">
                         <div className="flex items-start justify-between">

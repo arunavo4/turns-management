@@ -17,14 +17,14 @@ interface AuditLogEntry {
   tableName: string;
   recordId: string;
   action: AuditAction;
-  oldValues?: any;
-  newValues?: any;
+  oldValues?: Record<string, unknown>;
+  newValues?: Record<string, unknown>;
   changedFields?: string[];
   propertyId?: string;
   turnId?: string;
   vendorId?: string;
   context?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 class AuditService {
@@ -84,10 +84,10 @@ class AuditService {
       const auditLogData = {
         tableName: entry.tableName,
         recordId: entry.recordId,
-        action: entry.action as any,
+        action: entry.action,
         userId: session.user.id,
         userEmail: session.user.email || '',
-        userRole: session.user.role as any,
+        userRole: (session.user as { role?: string }).role || 'ADMIN',
         oldValues: entry.oldValues || null,
         newValues: entry.newValues || null,
         changedFields: entry.changedFields || null,
@@ -108,7 +108,7 @@ class AuditService {
   }
 
   // Helper method to calculate changed fields
-  calculateChangedFields(oldValues: any, newValues: any): string[] {
+  calculateChangedFields(oldValues: Record<string, unknown>, newValues: Record<string, unknown>): string[] {
     if (!oldValues || !newValues) return [];
     
     const changedFields: string[] = [];
@@ -127,7 +127,7 @@ class AuditService {
   }
 
   // Convenience methods for common actions
-  async logCreate(tableName: string, recordId: string, data: any, context?: string) {
+  async logCreate(tableName: string, recordId: string, data: Record<string, unknown>, context?: string) {
     await this.log({
       tableName,
       recordId,
@@ -140,8 +140,8 @@ class AuditService {
   async logUpdate(
     tableName: string, 
     recordId: string, 
-    oldData: any, 
-    newData: any, 
+    oldData: Record<string, unknown>, 
+    newData: Record<string, unknown>, 
     context?: string
   ) {
     const changedFields = this.calculateChangedFields(oldData, newData);
@@ -157,7 +157,7 @@ class AuditService {
     });
   }
 
-  async logDelete(tableName: string, recordId: string, data: any, context?: string) {
+  async logDelete(tableName: string, recordId: string, data: Record<string, unknown>, context?: string) {
     await this.log({
       tableName,
       recordId,
@@ -176,7 +176,7 @@ class AuditService {
     });
   }
 
-  async logExport(tableName: string, metadata: Record<string, any>, context?: string) {
+  async logExport(tableName: string, metadata: Record<string, unknown>, context?: string) {
     await this.log({
       tableName,
       recordId: 'EXPORT',
@@ -188,3 +188,21 @@ class AuditService {
 }
 
 export const auditService = AuditService.getInstance();
+
+// Legacy function for backward compatibility
+export async function logActivity(
+  tableName: string,
+  action: string,
+  recordId: string,
+  userId?: string | null,
+  oldValues?: Record<string, unknown> | null,
+  newValues?: Record<string, unknown> | null
+) {
+  await auditService.log({
+    tableName,
+    recordId,
+    action: action.toUpperCase() as AuditAction,
+    oldValues: oldValues || undefined,
+    newValues: newValues || undefined,
+  });
+}

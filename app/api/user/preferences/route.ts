@@ -88,7 +88,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
 
     // Map the incoming preferences to database columns
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     
     if (body.notifications) {
       updateData.emailNotifications = body.notifications.email;

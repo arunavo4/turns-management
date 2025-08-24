@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { turns } from './turns';
+import { turns } from '../schema';
 
 export const turnStages = pgTable('turn_stages', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -38,7 +38,7 @@ export const turnStages = pgTable('turn_stages', {
     conditions?: Array<{
       field: string;
       operator: string;
-      value: any;
+      value: unknown;
     }>;
   }>(),
   

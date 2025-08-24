@@ -32,8 +32,8 @@ export async function GET(request: NextRequest) {
       sortOrder: (searchParams.get("sortOrder") as 'asc' | 'desc') || "asc",
     };
 
-    const page = Math.max(1, parseInt(params.page));
-    const limit = Math.min(100, Math.max(1, parseInt(params.limit))); // Cap at 100
+    const page = Math.max(1, parseInt(params.page || '1'));
+    const limit = Math.min(100, Math.max(1, parseInt(params.limit || '50'))); // Cap at 100
     const offset = (page - 1) * limit;
 
     // Build where conditions
@@ -47,38 +47,38 @@ export async function GET(request: NextRequest) {
           ilike(properties.name, searchTerm),
           ilike(properties.address, searchTerm),
           ilike(properties.city, searchTerm),
-          ilike(properties.unitNumber, searchTerm)
+          ilike(properties.propertyId, searchTerm)
         )
       );
     }
 
     // Status filter
     if (params.status && params.status !== 'all') {
-      conditions.push(eq(properties.status, params.status));
+      conditions.push(eq(properties.status, params.status as 'active' | 'inactive' | 'occupied' | 'vacant' | 'maintenance' | 'pending_turn'));
     }
 
     // Type filter
     if (params.type && params.type !== 'all') {
-      conditions.push(eq(properties.type, params.type));
+      conditions.push(eq(properties.type, params.type as 'single_family' | 'multi_family' | 'apartment' | 'condo' | 'townhouse' | 'commercial'));
     }
 
     // Build the query
     let query = db.select().from(properties);
     
     if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
+      query = query.where(and(...conditions));
     }
 
     // Add sorting
     const sortColumn = params.sortBy === 'address' ? properties.address :
                       params.sortBy === 'city' ? properties.city :
-                      params.sortBy === 'rent' ? properties.rent :
+                      params.sortBy === 'rent' ? properties.monthlyRent :
                       params.sortBy === 'createdAt' ? properties.createdAt :
                       properties.name;
 
     query = (params.sortOrder === 'desc' 
       ? query.orderBy(desc(sortColumn))
-      : query.orderBy(asc(sortColumn))) as any;
+      : query.orderBy(asc(sortColumn)));
 
     // Execute paginated query
     const results = await query.limit(limit).offset(offset);
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     // Get total count for pagination
     let countQuery = db.select({ count: sql<number>`count(*)` }).from(properties);
     if (conditions.length > 0) {
-      countQuery = countQuery.where(and(...conditions)) as any;
+      countQuery = countQuery.where(and(...conditions));
     }
     const [{ count }] = await countQuery;
 

@@ -84,11 +84,11 @@ export const useKanban = () => {
 
 // Provider
 interface KanbanProviderProps {
-  children: React.ReactNode | ((column: any) => React.ReactNode);
+  children: React.ReactNode | ((column: KanbanColumn) => React.ReactNode);
   data?: KanbanData;
-  columns?: any[];
+  columns?: KanbanColumn[];
   onCardMove?: (cardId: string, sourceColumnId: string, destinationColumnId: string) => void;
-  onDataChange?: (data: any[]) => void;
+  onDataChange?: (data: KanbanColumn[]) => void;
 }
 
 export const KanbanProvider = ({ children, data: initialData, columns, onCardMove, onDataChange }: KanbanProviderProps) => {
@@ -111,7 +111,7 @@ export const KanbanProvider = ({ children, data: initialData, columns, onCardMov
 
   return (
     <KanbanContext.Provider value={{ data, setData, onCardMove }}>
-      {children}
+      {children as React.ReactNode}
     </KanbanContext.Provider>
   );
 };
@@ -278,7 +278,7 @@ export const KanbanBoard = ({ children, id }: { children: React.ReactNode; id?: 
   return <>{children}</>;
 };
 
-export const KanbanCards = ({ children, id }: { children: React.ReactNode | ((item: any) => React.ReactNode); id?: string }) => {
+export const KanbanCards = ({ children, id }: { children: React.ReactNode | ((item: KanbanCard) => React.ReactNode); id?: string }) => {
   // For now, we'll assume this component doesn't need to iterate over data
   // It should be handled by the parent component
   return <>{children}</>;

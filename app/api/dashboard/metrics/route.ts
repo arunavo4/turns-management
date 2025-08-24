@@ -1,7 +1,15 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { properties, turns, vendors, turnHistory } from "@/lib/db/schema";
-import { eq, and, sql, gte, lte, desc } from "drizzle-orm";
+import {
+  desc,
+  eq,
+} from 'drizzle-orm';
+import { NextResponse } from 'next/server';
+
+import { db } from '@/lib/db';
+import {
+  properties,
+  turns,
+  vendors,
+} from '@/lib/db/schema';
 
 export async function GET() {
   try {
@@ -21,25 +29,25 @@ export async function GET() {
 
     // Fetch all properties
     const allProperties = await db.select().from(properties);
-    const activeProperties = allProperties.filter(p => p.status === 'active').length;
-    const lastMonthProperties = allProperties.filter(p => 
+    const activeProperties = allProperties.filter((p: { status: string; }) => p.status === 'active').length;
+    const lastMonthProperties = allProperties.filter((p: { createdAt: number; }) => 
       p.createdAt && p.createdAt >= startOfLastMonth && p.createdAt <= endOfLastMonth
     ).length;
 
     // Fetch all turns
     const allTurns = await db.select().from(turns);
-    const activeTurns = allTurns.filter(t => 
+    const activeTurns = allTurns.filter((t: { status: string; }) => 
       t.status !== 'completed' && t.status !== 'cancelled'
     ).length;
     
     // Calculate overdue turns
-    const overdueTurns = allTurns.filter(t => {
+    const overdueTurns = allTurns.filter((t: { turnDueDate: number; status: string; }) => {
       if (!t.turnDueDate || t.status === 'completed' || t.status === 'cancelled') return false;
       return t.turnDueDate < Date.now();
     }).length;
 
     // Calculate completed turns this month
-    const completedTurnsThisMonth = allTurns.filter(t => 
+    const completedTurnsThisMonth = allTurns.filter((t: { status: string; updatedAt: number; }) => 
       t.status === 'completed' && 
       t.updatedAt >= startOfMonth && 
       t.updatedAt <= endOfMonth
@@ -47,21 +55,21 @@ export async function GET() {
 
     // Calculate monthly revenue (sum of actual costs for completed turns this month)
     const monthlyRevenue = allTurns
-      .filter(t => 
+      .filter((t: { status: string; updatedAt: number; }) => 
         t.status === 'completed' && 
         t.updatedAt >= startOfMonth && 
         t.updatedAt <= endOfMonth
       )
-      .reduce((sum, turn) => {
+      .reduce((sum: number, turn: { actualCost: string; }) => {
         const cost = turn.actualCost ? parseFloat(turn.actualCost) : 0;
         return sum + cost;
       }, 0);
 
     // Calculate average turn time (in days)
-    const completedTurns = allTurns.filter(t => t.status === 'completed');
+    const completedTurns = allTurns.filter((t: { status: string; }) => t.status === 'completed');
     let averageTurnTime = 0;
     if (completedTurns.length > 0) {
-      const totalDays = completedTurns.reduce((sum, turn) => {
+      const totalDays = completedTurns.reduce((sum: number, turn: { createdAt: number; updatedAt: number; }) => {
         if (turn.createdAt && turn.updatedAt) {
           const days = Math.ceil((turn.updatedAt - turn.createdAt) / (1000 * 60 * 60 * 24));
           return sum + days;
@@ -72,7 +80,7 @@ export async function GET() {
     }
 
     // Calculate completion rate
-    const totalTurnsThisMonth = allTurns.filter(t => 
+    const totalTurnsThisMonth = allTurns.filter((t: { createdAt: number; }) => 
       t.createdAt >= startOfMonth && t.createdAt <= endOfMonth
     ).length;
     const completionRate = totalTurnsThisMonth > 0 
@@ -80,7 +88,7 @@ export async function GET() {
       : 0;
 
     // Get pending approvals (turns with high cost that need approval)
-    const approvalsPending = allTurns.filter(t => {
+    const approvalsPending = allTurns.filter((t: { estimatedCost: string; status: string; }) => {
       const cost = t.estimatedCost ? parseFloat(t.estimatedCost) : 0;
       return cost > 3000 && t.status === 'scope_review';
     }).length;
@@ -107,7 +115,7 @@ export async function GET() {
 
     // Calculate monthly targets based on historical data
     const lastThreeMonths = new Date(now.getFullYear(), now.getMonth() - 3, 1).getTime();
-    const historicalTurns = allTurns.filter(t => 
+    const historicalTurns = allTurns.filter((t: { createdAt: number; }) => 
       t.createdAt >= lastThreeMonths && t.createdAt < startOfMonth
     );
     
@@ -118,12 +126,12 @@ export async function GET() {
     
     // Calculate revenue target based on historical average + 10% growth
     const historicalRevenue = allTurns
-      .filter(t => 
+      .filter((t: { status: string; updatedAt: number; }) => 
         t.status === 'completed' && 
         t.updatedAt >= lastThreeMonths && 
         t.updatedAt < startOfMonth
       )
-      .reduce((sum, turn) => {
+      .reduce((sum: number, turn: { actualCost: string; }) => {
         const cost = turn.actualCost ? parseFloat(turn.actualCost) : 0;
         return sum + cost;
       }, 0);

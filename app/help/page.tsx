@@ -275,15 +275,15 @@ export default function HelpPage() {
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">API Services</span>
-                  <Badge variant="success">Operational</Badge>
+                  <Badge variant="default">Operational</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Database</span>
-                  <Badge variant="success">Operational</Badge>
+                  <Badge variant="default">Operational</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Authentication</span>
-                  <Badge variant="success">Operational</Badge>
+                  <Badge variant="default">Operational</Badge>
                 </div>
                 <div className="pt-2">
                   <Button variant="link" className="p-0 h-auto text-sm">

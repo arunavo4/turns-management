@@ -12,7 +12,7 @@ export async function getSession(request?: NextRequest) {
     
     // Use Better Auth's api.getSession method
     const session = await auth.api.getSession({
-      headers: headersObj,
+      headers: headersObj as unknown as Headers,
     });
 
     return session;
@@ -43,7 +43,7 @@ export async function requireRole(role: string | string[], request?: NextRequest
   
   const roles = Array.isArray(role) ? role : [role];
   
-  if (!roles.includes(session.user.role)) {
+  if (!roles.includes((session.user as { role?: string }).role || '')) {
     throw new Error("Insufficient permissions");
   }
   

@@ -187,7 +187,7 @@ export default function TurnDetailPage() {
 
   const canApprove = () => {
     if (!session?.user || !turn) return false;
-    const userRole = session.user.role;
+    const userRole = (session.user as any).role;
     
     // Check if user has approval permissions
     return (
@@ -351,7 +351,7 @@ export default function TurnDetailPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Stage</p>
-                      <p className="text-base">{turn.stage}</p>
+                      <p className="text-base">{turn.stage?.name || "Not set"}</p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Estimated Cost</p>

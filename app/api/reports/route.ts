@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { properties, turns, vendors, turnHistory } from "@/lib/db/schema";
-import { eq, and, sql, gte, lte, desc, asc } from "drizzle-orm";
+import { properties, turns, vendors } from "@/lib/db/schema";
 
 export async function GET(request: Request) {
   try {
@@ -43,19 +42,19 @@ export async function GET(request: Request) {
     const allVendors = await db.select().from(vendors);
 
     // Filter turns by time range
-    const turnsInRange = allTurns.filter(t => 
+    const turnsInRange = allTurns.filter((t: any) => 
       t.createdAt >= startTime && t.createdAt <= endTime
     );
 
     // Calculate key metrics
     const totalRevenue = turnsInRange
-      .filter(t => t.status === 'completed')
-      .reduce((sum, turn) => {
+      .filter((t: any) => t.status === 'completed')
+      .reduce((sum: number, turn: any) => {
         const cost = turn.actualCost ? parseFloat(turn.actualCost) : 0;
         return sum + cost;
       }, 0);
 
-    const completedTurns = turnsInRange.filter(t => t.status === 'completed').length;
+    const completedTurns = turnsInRange.filter((t: any) => t.status === 'completed').length;
     const avgCostPerTurn = completedTurns > 0 ? totalRevenue / completedTurns : 0;
     
     const totalTurns = turnsInRange.length;
@@ -68,18 +67,18 @@ export async function GET(request: Request) {
     const previousStartTime = startTime - previousPeriodDuration;
     const previousEndTime = startTime;
     
-    const previousTurns = allTurns.filter(t => 
+    const previousTurns = allTurns.filter((t: any) => 
       t.createdAt >= previousStartTime && t.createdAt < previousEndTime
     );
     
     const previousRevenue = previousTurns
-      .filter(t => t.status === 'completed')
-      .reduce((sum, turn) => {
+      .filter((t: any) => t.status === 'completed')
+      .reduce((sum: number, turn: any) => {
         const cost = turn.actualCost ? parseFloat(turn.actualCost) : 0;
         return sum + cost;
       }, 0);
     
-    const previousCompleted = previousTurns.filter(t => t.status === 'completed').length;
+    const previousCompleted = previousTurns.filter((t: any) => t.status === 'completed').length;
     
     // Calculate trends
     const revenueTrend = previousRevenue > 0 
@@ -96,18 +95,18 @@ export async function GET(request: Request) {
       const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1).getTime();
       const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0).getTime();
       
-      const monthTurns = allTurns.filter(t => 
+      const monthTurns = allTurns.filter((t: any) => 
         t.createdAt >= monthStart && t.createdAt <= monthEnd
       );
       
       const monthRevenue = monthTurns
-        .filter(t => t.status === 'completed')
-        .reduce((sum, turn) => {
+        .filter((t: any) => t.status === 'completed')
+        .reduce((sum: number, turn: any) => {
           const cost = turn.actualCost ? parseFloat(turn.actualCost) : 0;
           return sum + cost;
         }, 0);
       
-      const monthCompleted = monthTurns.filter(t => t.status === 'completed').length;
+      const monthCompleted = monthTurns.filter((t: any) => t.status === 'completed').length;
       const avgCost = monthCompleted > 0 ? monthRevenue / monthCompleted : 0;
       
       monthlyData.push({
@@ -122,12 +121,12 @@ export async function GET(request: Request) {
     const statusDistribution = [
       { 
         name: 'Completed', 
-        value: turnsInRange.filter(t => t.status === 'completed').length,
+        value: turnsInRange.filter((t: any) => t.status === 'completed').length,
         color: '#22c55e'
       },
       { 
         name: 'In Progress', 
-        value: turnsInRange.filter(t => 
+        value: turnsInRange.filter((t: any) => 
           t.status === 'in_progress' || 
           t.status === 'vendor_assigned' || 
           t.status === 'scope_review'
@@ -136,23 +135,23 @@ export async function GET(request: Request) {
       },
       { 
         name: 'Pending', 
-        value: turnsInRange.filter(t => t.status === 'draft').length,
+        value: turnsInRange.filter((t: any) => t.status === 'draft').length,
         color: '#eab308'
       },
       { 
         name: 'Cancelled', 
-        value: turnsInRange.filter(t => t.status === 'cancelled').length,
+        value: turnsInRange.filter((t: any) => t.status === 'cancelled').length,
         color: '#ef4444'
       },
     ];
 
     // Vendor performance (calculate from actual turn data)
-    const vendorPerformance = allVendors.map(vendor => {
-      const vendorTurns = turnsInRange.filter(t => t.vendorId === vendor.id);
-      const completedVendorTurns = vendorTurns.filter(t => t.status === 'completed');
+    const vendorPerformance = allVendors.map((vendor: any) => {
+      const vendorTurns = turnsInRange.filter((t: any) => t.vendorId === vendor.id);
+      const completedVendorTurns = vendorTurns.filter((t: any) => t.status === 'completed');
       
       // Calculate on-time rate
-      const onTimeTurns = completedVendorTurns.filter(t => {
+      const onTimeTurns = completedVendorTurns.filter((t: any) => {
         if (!t.turnDueDate) return true; // No due date means on time
         return t.updatedAt <= t.turnDueDate;
       });
@@ -161,7 +160,7 @@ export async function GET(request: Request) {
         ? Math.round((onTimeTurns.length / completedVendorTurns.length) * 100)
         : 100;
       
-      const totalRevenue = completedVendorTurns.reduce((sum, turn) => {
+      const totalRevenue = completedVendorTurns.reduce((sum: number, turn: any) => {
         const cost = turn.actualCost ? parseFloat(turn.actualCost) : 0;
         return sum + cost;
       }, 0);
@@ -179,25 +178,25 @@ export async function GET(request: Request) {
         avgCost,
         totalRevenue
       };
-    }).filter(v => v.jobs > 0) // Only include vendors with completed jobs
-      .sort((a, b) => (b.rating * b.onTimeRate) - (a.rating * a.onTimeRate))
+    }).filter((v: any) => v.jobs > 0) // Only include vendors with completed jobs
+      .sort((a: any, b: any) => (b.rating * b.onTimeRate) - (a.rating * a.onTimeRate))
       .slice(0, 10);
 
     // Property type analysis
     const propertyTypes = ['apartment', 'house', 'condo', 'townhouse', 'commercial'];
-    const propertyTypeData = propertyTypes.map(type => {
-      const typeProperties = allProperties.filter(p => 
+    const propertyTypeData = propertyTypes.map((type: string) => {
+      const typeProperties = allProperties.filter((p: any) => 
         p.propertyType?.toLowerCase() === type
       );
       
-      const typePropertyIds = typeProperties.map(p => p.id);
-      const typeTurns = turnsInRange.filter(t => 
+      const typePropertyIds = typeProperties.map((p: any) => p.id);
+      const typeTurns = turnsInRange.filter((t: any) => 
         typePropertyIds.includes(t.propertyId)
       );
       
       const typeRevenue = typeTurns
-        .filter(t => t.status === 'completed')
-        .reduce((sum, turn) => {
+        .filter((t: any) => t.status === 'completed')
+        .reduce((sum: number, turn: any) => {
           const cost = turn.actualCost ? parseFloat(turn.actualCost) : 0;
           return sum + cost;
         }, 0);
@@ -208,7 +207,7 @@ export async function GET(request: Request) {
         revenue: typeRevenue,
         turns: typeTurns.length
       };
-    }).filter(t => t.count > 0);
+    }).filter((t: any) => t.count > 0);
 
     // Weekly turn trends (last 4 weeks)
     const weeklyTrends = [];
@@ -216,19 +215,19 @@ export async function GET(request: Request) {
       const weekStart = new Date(now.getTime() - (i + 1) * 7 * 24 * 60 * 60 * 1000).getTime();
       const weekEnd = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000).getTime();
       
-      const weekTurns = allTurns.filter(t => 
+      const weekTurns = allTurns.filter((t: any) => 
         t.createdAt >= weekStart && t.createdAt < weekEnd
       );
       
-      const completed = weekTurns.filter(t => 
+      const completed = weekTurns.filter((t: any) => 
         t.status === 'completed' && t.updatedAt >= weekStart && t.updatedAt < weekEnd
       ).length;
       
-      const started = weekTurns.filter(t => 
+      const started = weekTurns.filter((t: any) => 
         t.createdAt >= weekStart && t.createdAt < weekEnd
       ).length;
       
-      const overdue = weekTurns.filter(t => {
+      const overdue = weekTurns.filter((t: any) => {
         if (!t.turnDueDate || t.status === 'completed' || t.status === 'cancelled') return false;
         return t.turnDueDate < weekEnd && t.turnDueDate >= weekStart;
       }).length;
@@ -246,29 +245,29 @@ export async function GET(request: Request) {
 
     // Insurance expiration alerts
     const expirationAlerts = allVendors
-      .filter(vendor => {
+      .filter((vendor: any) => {
         if (!vendor.insuranceExpiry) return false;
         const expiryTime = vendor.insuranceExpiry;
         const daysUntilExpiry = Math.ceil((expiryTime - now.getTime()) / (1000 * 60 * 60 * 24));
         return daysUntilExpiry <= 90 && daysUntilExpiry > 0;
       })
-      .map(vendor => ({
+      .map((vendor: any) => ({
         id: vendor.id,
         companyName: vendor.companyName,
         insuranceExpiry: vendor.insuranceExpiry,
         daysUntilExpiry: Math.ceil((vendor.insuranceExpiry! - now.getTime()) / (1000 * 60 * 60 * 24))
       }))
-      .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
+      .sort((a: any, b: any) => a.daysUntilExpiry - b.daysUntilExpiry)
       .slice(0, 5);
 
     // Average turn time calculation
-    const completedTurnsWithTime = turnsInRange.filter(t => 
+    const completedTurnsWithTime = turnsInRange.filter((t: any) => 
       t.status === 'completed' && t.createdAt && t.updatedAt
     );
     
     let avgTurnTime = 0;
     if (completedTurnsWithTime.length > 0) {
-      const totalDays = completedTurnsWithTime.reduce((sum, turn) => {
+      const totalDays = completedTurnsWithTime.reduce((sum: number, turn: any) => {
         const days = Math.ceil((turn.updatedAt - turn.createdAt) / (1000 * 60 * 60 * 24));
         return sum + days;
       }, 0);

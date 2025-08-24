@@ -75,8 +75,8 @@ export async function PUT(
     const { 
       id: _, 
       insuranceExpiry, 
-      createdAt,
-      updatedAt: __,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
       averageCost,
       onTimeRate,
       completedJobs,
@@ -84,7 +84,7 @@ export async function PUT(
       ...rest 
     } = body;
     
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       ...rest,
       updatedAt: Date.now(),
     };
@@ -177,7 +177,7 @@ export async function DELETE(
       );
     }
     
-    const deletedVendor = await db
+    await db
       .delete(vendors)
       .where(eq(vendors.id, id))
       .returning();

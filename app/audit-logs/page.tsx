@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,10 +105,14 @@ export default function AuditLogsPage() {
       filterUser, 
       logsPerPage 
     }),
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to fetch audit logs");
-    },
   });
+
+  // Handle error with useEffect
+  useEffect(() => {
+    if (error) {
+      toast.error(error.message || "Failed to fetch audit logs");
+    }
+  }, [error]);
 
   const totalPages = logs.length === logsPerPage ? currentPage + 1 : currentPage;
 
@@ -116,7 +120,7 @@ export default function AuditLogsPage() {
     const headers = ["Date", "User", "Role", "Action", "Table", "Record ID", "Changes", "IP Address"];
     const csvContent = [
       headers.join(","),
-      ...logs.map(log => [
+      ...logs.map((log: any) => [
         format(new Date(log.createdAt), "yyyy-MM-dd HH:mm:ss"),
         log.userEmail,
         log.userRole,
@@ -125,7 +129,7 @@ export default function AuditLogsPage() {
         log.recordId,
         log.changedFields?.join("; ") || "",
         log.ipAddress || "",
-      ].map(field => `"${field}"`).join(","))
+      ].map((field: any) => `"${field}"`).join(","))
     ].join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -174,7 +178,7 @@ export default function AuditLogsPage() {
     }
   };
 
-  const filteredLogs = (logs || []).filter(log => {
+  const filteredLogs = (logs || []).filter((log: any) => {
     if (searchTerm && !log.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) &&
         !log.context?.toLowerCase().includes(searchTerm.toLowerCase()) &&
         !log.recordId.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -184,7 +188,7 @@ export default function AuditLogsPage() {
     return true;
   });
 
-  const isAdmin = session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "ADMIN";
+  const isAdmin = (session?.user as any)?.role === "SUPER_ADMIN" || (session?.user as any)?.role === "ADMIN";
 
   return (
     <DashboardLayout>
@@ -304,7 +308,7 @@ export default function AuditLogsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredLogs.map((log) => (
+                      {filteredLogs.map((log: any) => (
                         <TableRow key={log.id}>
                           <TableCell className="font-mono text-sm">
                             <div>
@@ -351,7 +355,7 @@ export default function AuditLogsPage() {
                           <TableCell className="text-right">
                             {log.changedFields && log.changedFields.length > 0 ? (
                               <div className="flex flex-wrap gap-1 justify-end">
-                                {log.changedFields.slice(0, 3).map((field) => (
+                                {log.changedFields.slice(0, 3).map((field: any) => (
                                   <Badge key={field} variant="secondary" className="text-xs">
                                     {field.replace(/_/g, " ")}
                                   </Badge>

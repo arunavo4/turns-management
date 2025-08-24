@@ -244,7 +244,7 @@ export default function NewVendorPage() {
             <CardHeader>
               <CardTitle>Address</CardTitle>
               <CardDescription>
-                Vendor's business address
+                Vendor&apos;s business address
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 md:grid-cols-2">

@@ -150,6 +150,8 @@ export default function NewPropertyPage() {
       propertyId,
       type: formData.propertyType,
       color: formData.isCore ? 7 : 11,
+      monthlyRent: formData.monthlyRent.toString(),
+      bathrooms: formData.bathrooms.toString(),
     });
   };
 

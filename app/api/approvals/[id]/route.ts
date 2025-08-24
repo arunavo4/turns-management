@@ -9,7 +9,7 @@ import { sendApprovalDecisionNotification } from "@/lib/email/notifications";
 // GET /api/approvals/[id] - Get a specific approval
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession(request);
@@ -17,10 +17,11 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
     const [approval] = await db
       .select()
       .from(approvals)
-      .where(eq(approvals.id, params.id))
+      .where(eq(approvals.id, id))
       .limit(1);
 
     if (!approval) {
@@ -40,9 +41,10 @@ export async function GET(
 // PUT /api/approvals/[id] - Update approval (approve/reject)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession(request);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -69,7 +71,7 @@ export async function PUT(
     const [currentApproval] = await db
       .select()
       .from(approvals)
-      .where(eq(approvals.id, params.id))
+      .where(eq(approvals.id, id))
       .limit(1);
 
     if (!currentApproval) {
@@ -87,7 +89,15 @@ export async function PUT(
     // For now, we'll allow any authenticated user to approve/reject
 
     const now = new Date();
-    const updateData: any = {
+    const updateData: {
+      status: string;
+      updatedAt: Date;
+      approvedBy?: string | null;
+      approvedAt?: Date;
+      rejectedBy?: string | null;
+      rejectedAt?: Date;
+      rejectionReason?: string;
+    } = {
       status: action === 'approve' ? 'approved' : 'rejected',
       updatedAt: now,
     };
@@ -105,11 +115,20 @@ export async function PUT(
     const [updatedApproval] = await db
       .update(approvals)
       .set(updateData)
-      .where(eq(approvals.id, params.id))
+      .where(eq(approvals.id, id))
       .returning();
 
     // Update the turn approval status
-    const turnUpdateData: any = {
+    const turnUpdateData: {
+      updatedAt: number;
+      dfoApprovedBy?: string | null;
+      dfoApprovedAt?: number;
+      needsDfoApproval?: boolean;
+      hoApprovedBy?: string | null;
+      hoApprovedAt?: number;
+      needsHoApproval?: boolean;
+      rejectionReason?: string;
+    } = {
       updatedAt: Date.now(),
     };
 
@@ -140,7 +159,7 @@ export async function PUT(
     await logActivity(
       'approvals',
       action === 'approve' ? 'approve' : 'reject',
-      params.id,
+      id,
       session.user.id,
       currentApproval,
       updatedApproval
@@ -197,9 +216,10 @@ export async function PUT(
 // DELETE /api/approvals/[id] - Cancel an approval request
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getSession(request);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -209,7 +229,7 @@ export async function DELETE(
     const [approval] = await db
       .select()
       .from(approvals)
-      .where(eq(approvals.id, params.id))
+      .where(eq(approvals.id, id))
       .limit(1);
 
     if (!approval) {
@@ -230,7 +250,7 @@ export async function DELETE(
         status: 'cancelled',
         updatedAt: new Date(),
       })
-      .where(eq(approvals.id, params.id))
+      .where(eq(approvals.id, id))
       .returning();
 
     // Check if there are other pending approvals for this turn
@@ -260,7 +280,7 @@ export async function DELETE(
     await logActivity(
       'approvals',
       'cancel',
-      params.id,
+      id,
       session.user.id,
       approval,
       cancelledApproval

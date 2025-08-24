@@ -167,9 +167,9 @@ export async function PUT(
     // Process the update data to handle date fields and remove read-only fields
     const { 
       id: _, 
-      createdAt: __,
-      createdBy: ___,
-      turnNumber: ____,
+      createdAt: _createdAt,
+      createdBy: _createdBy,
+      turnNumber: _turnNumber,
       ...updateData 
     } = body;
     
@@ -319,7 +319,7 @@ export async function DELETE(
       );
     }
     
-    const deletedTurn = await db
+    await db
       .delete(turns)
       .where(eq(turns.id, id))
       .returning();

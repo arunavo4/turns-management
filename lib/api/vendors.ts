@@ -94,7 +94,7 @@ export async function deleteVendor(id: string): Promise<void> {
 export const vendorKeys = {
   all: ["vendors"] as const,
   lists: () => [...vendorKeys.all, "list"] as const,
-  list: (filters?: any) => [...vendorKeys.lists(), { filters }] as const,
+  list: (filters?: Record<string, unknown>) => [...vendorKeys.lists(), { filters }] as const,
   details: () => [...vendorKeys.all, "detail"] as const,
   detail: (id: string) => [...vendorKeys.details(), id] as const,
 };

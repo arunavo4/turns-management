@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { turnStages } from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 
 // GET /api/turn-stages - Get all active stages
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     if (!db) {
       return NextResponse.json(

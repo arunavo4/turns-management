@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
     }
 
     // For non-admin users, only show their own audit logs or logs related to their properties
-    if (session?.user && session.user.role !== 'SUPER_ADMIN' && session.user.role !== 'ADMIN') {
+    const userRole = (session?.user as { role?: string })?.role;
+    if (session?.user && userRole !== 'SUPER_ADMIN' && userRole !== 'ADMIN') {
       // Only add userId condition if we have a valid user ID
       if (session.user.id) {
         conditions.push(

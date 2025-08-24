@@ -121,9 +121,9 @@ export default function EditPropertyPage() {
         country: "United States",
         market: property.market || "",
         bedrooms: property.bedrooms || 1,
-        bathrooms: property.bathrooms || 1,
+        bathrooms: parseFloat(property.bathrooms as any) || 1,
         squareFeet: property.squareFeet || 0,
-        monthlyRent: property.monthlyRent || 0,
+        monthlyRent: parseFloat(property.monthlyRent as any) || 0,
         status: property.status || "active",
         statusYardi: property.statusYardi || "",
         isCore: property.isCore !== undefined ? property.isCore : true,
@@ -219,6 +219,8 @@ export default function EditPropertyPage() {
       ...formData,
       type: formData.propertyType,
       color: formData.isCore ? 7 : 11,
+      monthlyRent: formData.monthlyRent.toString(),
+      bathrooms: formData.bathrooms.toString(),
     });
   };
 

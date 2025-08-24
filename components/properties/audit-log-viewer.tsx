@@ -35,13 +35,13 @@ interface AuditLog {
   userId: string;
   userEmail: string;
   userRole: string;
-  oldValues?: any;
-  newValues?: any;
+  oldValues?: Record<string, unknown>;
+  newValues?: Record<string, unknown>;
   changedFields?: string[];
   context?: string;
   ipAddress?: string;
   userAgent?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -136,10 +136,10 @@ export default function AuditLogViewer({ propertyId, limit = 50 }: AuditLogViewe
     );
   };
 
-  const formatValueChange = (field: string, oldValue: any, newValue: any) => {
+  const formatValueChange = (field: string, oldValue: unknown, newValue: unknown) => {
     if (oldValue === newValue) return null;
 
-    const formatValue = (value: any) => {
+    const formatValue = (value: unknown) => {
       if (value === null || value === undefined) return "—";
       if (typeof value === "boolean") return value ? "Yes" : "No";
       if (typeof value === "object") return JSON.stringify(value);

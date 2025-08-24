@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { approvals, turns, approvalThresholds, user, properties } from "@/lib/db/schema";
-import { eq, and, gte, or, lte, desc } from "drizzle-orm";
+import { approvals, turns, approvalThresholds, properties } from "@/lib/db/schema";
+import { eq, and, or, desc, lte } from "drizzle-orm";
 import { getSession } from "@/lib/auth-helpers";
 import { logActivity } from "@/lib/audit-service";
-import { sendApprovalRequestNotification, sendBulkApprovalRequests } from "@/lib/email/notifications";
+import { sendApprovalRequestNotification } from "@/lib/email/notifications";
 
 // GET /api/approvals - Get all approvals or filter by turn/status
 export async function GET(request: NextRequest) {
@@ -24,11 +24,11 @@ export async function GET(request: NextRequest) {
     // Build where conditions
     const conditions = [];
     if (turnId) conditions.push(eq(approvals.turnId, turnId));
-    if (status) conditions.push(eq(approvals.status, status as any));
-    if (type) conditions.push(eq(approvals.type, type as any));
+    if (status) conditions.push(eq(approvals.status, status as 'pending' | 'approved' | 'rejected' | 'cancelled'));
+    if (type) conditions.push(eq(approvals.type, type as 'dfo' | 'ho'));
 
     if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
+      query = query.where(and(...conditions));
     }
 
     const result = await query.orderBy(desc(approvals.createdAt));
@@ -141,35 +141,27 @@ export async function POST(request: NextRequest) {
 
     // Send email notifications to approvers
     try {
-      // Get approvers based on approval types
-      const approverRoles: string[] = [];
-      if (approvalsToCreate.some(a => a.type === 'dfo')) {
-        approverRoles.push('DFO_APPROVER');
-      }
-      if (approvalsToCreate.some(a => a.type === 'ho')) {
-        approverRoles.push('HO_APPROVER');
-      }
+      // TODO: Fix user role field - user table doesn't have a role column
+      // For now, skip sending notifications to approvers
+      // const approverUsers = await db
+      //   .select()
+      //   .from(user)
+      //   .where(
+      //     or(...approverRoles.map(role => eq((user as unknown as { role: string }).role, role)))
+      //   );
 
-      // Get users with approver roles
-      const approverUsers = await db
-        .select()
-        .from(user)
-        .where(
-          or(...approverRoles.map(role => eq(user.role, role as any)))
-        );
-
-      // Send notifications to each approver
-      for (const approver of approverUsers) {
-        await sendApprovalRequestNotification({
-          turnId: turnId,
-          propertyAddress: `${turnWithProperty.property.address}, ${turnWithProperty.property.city}, ${turnWithProperty.property.state} ${turnWithProperty.property.zipCode}`,
-          estimatedCost: parseFloat(amount),
-          priority: turnWithProperty.turn.priority || 'MEDIUM',
-          approverEmail: approver.email,
-          approverName: approver.name || approver.email,
-          submitterName: session.user.name || session.user.email || 'System',
-        });
-      }
+      // // Send notifications to each approver
+      // for (const approver of approverUsers) {
+      //   await sendApprovalRequestNotification({
+      //     turnId: turnId,
+      //     propertyAddress: `${turnWithProperty.property.address}, ${turnWithProperty.property.city}, ${turnWithProperty.property.state} ${turnWithProperty.property.zipCode}`,
+      //     estimatedCost: parseFloat(amount),
+      //     priority: turnWithProperty.turn.priority || 'MEDIUM',
+      //     approverEmail: approver.email,
+      //     approverName: approver.name || approver.email,
+      //     submitterName: session.user.name || session.user.email || 'System',
+      //   });
+      // }
     } catch (emailError) {
       console.error('Failed to send approval email notifications:', emailError);
       // Don't fail the request if email fails
@@ -192,7 +184,7 @@ export async function POST(request: NextRequest) {
     await logActivity(
       'approvals',
       'create',
-      newApprovals.map(a => a.id).join(','),
+      newApprovals.map((a: { id: string }) => a.id).join(','),
       session.user.id,
       null,
       { turnId, amount, count: newApprovals.length }

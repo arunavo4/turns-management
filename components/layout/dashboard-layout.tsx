@@ -15,7 +15,6 @@ import {
   IconMenu2,
   IconX,
   IconBell,
-  IconSearch,
   IconHelp,
   IconChevronDown,
   IconLogout,
@@ -38,7 +37,6 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 

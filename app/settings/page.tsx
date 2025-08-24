@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import DashboardLayout from "@/components/layout/dashboard-layout";
@@ -72,7 +72,7 @@ const changeUserPassword = async (data: any) => {
   return response.json();
 };
 
-export default function SettingsPage() {
+function SettingsContent() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -739,5 +739,19 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
     </DashboardLayout>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <IconLoader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </DashboardLayout>
+    }>
+      <SettingsContent />
+    </Suspense>
   );
 }

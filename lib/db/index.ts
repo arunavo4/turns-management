@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
+
 import * as schema from './schema';
 
 // Create the connection pool only if DATABASE_URL exists
@@ -25,7 +26,6 @@ const getDatabaseConnection = () => {
 const pool = getDatabaseConnection();
 
 // Create the drizzle instance
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const db = pool ? drizzle(pool, { schema }) : null as any;
 
 // Export schema for type inference

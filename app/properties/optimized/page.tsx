@@ -256,7 +256,7 @@ export default function OptimizedPropertiesPage() {
                           {property.city}, {property.state}
                         </span>
                         <span className="font-semibold">
-                          {formatCurrency(property.rent)}/mo
+                          {formatCurrency(parseFloat(property.monthlyRent) || 0)}/mo
                         </span>
                       </div>
                     </CardContent>
@@ -299,7 +299,7 @@ export default function OptimizedPropertiesPage() {
                             </td>
                             <td className="p-4 text-sm">{property.type}</td>
                             <td className="p-4 text-right font-semibold">
-                              {formatCurrency(property.rent)}/mo
+                              {formatCurrency(parseFloat(property.monthlyRent) || 0)}/mo
                             </td>
                           </tr>
                         ))}

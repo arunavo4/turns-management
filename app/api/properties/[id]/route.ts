@@ -191,7 +191,7 @@ export async function DELETE(
       );
     }
     
-    const deletedProperty = await db
+    await db
       .delete(properties)
       .where(eq(properties.id, id))
       .returning();
