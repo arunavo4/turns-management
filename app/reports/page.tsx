@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,13 +41,11 @@ export default function ReportsPage() {
     to: endOfMonth(new Date()),
   });
   const [activeReport, setActiveReport] = useState("turn-completion");
-  const [reportData, setReportData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
   const [groupBy, setGroupBy] = useState("month");
 
-  const fetchReport = async () => {
-    setLoading(true);
-    try {
+  const { data: reportData, isLoading: loading } = useQuery({
+    queryKey: ["reports", activeReport, dateRange, groupBy],
+    queryFn: async () => {
       const params = new URLSearchParams({
         startDate: format(dateRange.from, "yyyy-MM-dd"),
         endDate: format(dateRange.to, "yyyy-MM-dd"),
@@ -55,18 +54,11 @@ export default function ReportsPage() {
 
       const response = await fetch(`/api/reports/${activeReport}?${params}`);
       if (!response.ok) throw new Error("Failed to fetch report");
-      const data = await response.json();
-      setReportData(data);
-    } catch (error) {
-      console.error("Error fetching report:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchReport();
-  }, [activeReport, dateRange, groupBy]);
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
+  });
 
   const exportToExcel = () => {
     if (!reportData) return;
