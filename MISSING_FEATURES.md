@@ -24,541 +24,586 @@ This document tracks features that exist in the old Odoo platform (`/decyphr_tur
 - Settings page with preferences management
 - Global search functionality with PostgreSQL full-text search
 - Approval workflow backend (database schema + API endpoints)
+- Reports & Analytics Module (4 report types with charts)
+- Password change functionality
+- Turn stage transition management
 
 ⚠️ **Partially Implemented:**
 - Approval workflow system (backend complete, UI pending)
-- Global search (basic version complete, advanced PostgreSQL FTS prepared)
+- Email notifications (basic setup, templates pending)
 
 ---
 
 ## 🔴 Critical Features (Phase 1) - From Odoo
 
-### 1. Approval Workflow System 🔄
+### 1. Utility Management Module ❌
 **Priority: CRITICAL**
-- [x] DFO approval workflow (threshold-based: $3000-$9999)
-- [x] HO approval workflow (higher amounts: >$10000)
-- [x] Approval thresholds configuration (database table + seeding)
-- [x] Approval timestamps tracking
-- [x] Approval user tracking
-- [x] Rejection reasons in API
-- [ ] Approval status indicators in UI
-- [x] Approval database schema:
-  - `approvals` table with full tracking
-  - `approval_thresholds` table for configuration
-  - Status enum: pending, approved, rejected, cancelled
-- [x] API endpoints:
-  - GET/POST `/api/approvals`
-  - GET/PUT/DELETE `/api/approvals/[id]`
-  - CRUD `/api/approval-thresholds`
+**Status: NOT STARTED**
+
+Complete utility bill management system from `property_utility_bill` module:
+
+- [ ] **Utility Bills CRUD**
+  - [ ] Create/Read/Update/Delete utility bills
+  - [ ] Support for: Power, Gas, Water, Sewer, Trash
+  - [ ] Bill attachment management (PDF uploads)
+  - [ ] Due date tracking and alerts
+  
+- [ ] **Utility Providers Management**
+  - [ ] Provider database with contact info
+  - [ ] Account number tracking per property
+  - [ ] Service type configuration
+  
+- [ ] **Payment Processing**
+  - [ ] Manual card payment recording
+  - [ ] Bank payment integration
+  - [ ] Payment confirmation tracking
+  - [ ] Card last 4 digits storage
+  - [ ] Confirmation number management
+  
+- [ ] **Financial Tracking**
+  - [ ] Current charges
+  - [ ] Late fees
+  - [ ] Establish/Reconnect fees
+  - [ ] Deposits and credits
+  - [ ] Past due amounts
+  - [ ] Total billing calculation
+  
+- [ ] **Reporting & Documents**
+  - [ ] PDF receipt generation
+  - [ ] Bank payment reports
+  - [ ] Manual payment reports
+  - [ ] Email receipts
+  
+- [ ] **Automated Features**
+  - [ ] PDF import for utility bills
+  - [ ] OneDrive sync for documents
+  - [ ] Cron jobs for due date reminders
 
 **Odoo Implementation Reference:**
-- File: `turns_management/models/turns_management.py`
-- Lines: 35-36 (Scope_Approval enum)
-- Lines: 62-71 (approval fields)
+- Module: `property_utility_bill`
+- Module: `utility_management`
+- Module: `utility_pdf_import`
+- Module: `utility_onedrive_sync`
 
-### 2. Email Notification System (Resend) ✅
+### 2. Lock Box Management System ❌
 **Priority: CRITICAL**
-- [ ] **Install Resend SDK**: `npm install resend`
-- [ ] **Setup API key**: Add `RESEND_API_KEY` to `.env.local`
-- [ ] **Create email service**: `/lib/email/resend-service.ts`
-- [ ] **Email templates** with React components:
+**Status: NOT STARTED**
+
+Complete lock box tracking from `turns_management` module:
+
+- [ ] **Lock Box Codes**
+  - [ ] Primary lock box code field
+  - [ ] Code change history tracking
+  - [ ] Previous codes display
+  
+- [ ] **Physical Tracking**
+  - [ ] Lock box location (Front/Back/Left/Right/Other)
+  - [ ] Installation date
+  - [ ] Lock box images attachment
+  
+- [ ] **History & Audit**
+  - [ ] Lock box history table (`lockbox_history`)
+  - [ ] Code change timestamps
+  - [ ] User who changed code
+  
+- [ ] **Security Features**
+  - [ ] Edit permissions control
+  - [ ] Access log tracking
+  - [ ] Secure property wizard
+
+**Odoo Implementation Reference:**
+- File: `turns_management/models/turns_management.py` (Lines 166-189)
+- Table: `lock_box_history` (already in schema)
+
+### 3. Move Out Property Schedule ❌
+**Priority: HIGH**
+**Status: NOT STARTED**
+
+Move out scheduling from `move_out_prt_schedule` module:
+
+- [ ] **Scheduling System**
+  - [ ] Move out date scheduling
+  - [ ] Property schedule views
+  - [ ] Calendar integration
+  
+- [ ] **Move Out Workflow**
+  - [ ] Link to turns management
+  - [ ] Automatic turn creation
+  - [ ] Status tracking
+  
+- [ ] **Logging & History**
+  - [ ] Move out logs
+  - [ ] Activity tracking
+  - [ ] Report generation
+
+**Odoo Implementation Reference:**
+- Module: `move_out_prt_schedule`
+- Module: `utility_management` (includes move out features)
+
+### 4. Document Management & OneDrive Integration ❌
+**Priority: CRITICAL**
+**Status: NOT STARTED**
+
+Advanced document management from multiple modules:
+
+- [ ] **OneDrive Integration**
+  - [ ] OAuth authentication
+  - [ ] Automatic sync
+  - [ ] Folder structure management
+  - [ ] Sync status tracking
+  
+- [ ] **Document Categories**
+  - [ ] Scope Photos
+  - [ ] Change Order Photos
+  - [ ] 360 Scan Documents
+  - [ ] Approved Scopes
+  - [ ] Lock Box Images
+  - [ ] Utility Bills
+  
+- [ ] **Document Features**
+  - [ ] Multiple file upload
+  - [ ] PDF watermarking
+  - [ ] Version control
+  - [ ] Access control
+  - [ ] Document preview
+  - [ ] Search within documents
+
+**Odoo Implementation Reference:**
+- Module: `onedrive_integration_odoo`
+- Module: `turns_onedrive_sync`
+- Module: `utility_onedrive_sync`
+- Multiple attachment fields in turns_management.py
+
+### 5. Email Management System 🔄
+**Priority: CRITICAL**
+**Status: PARTIALLY IMPLEMENTED**
+
+- [x] Basic email sending capability
+- [ ] **Email Templates**
   - [ ] Turn created notification
   - [ ] Turn assigned to vendor
   - [ ] Approval request (DFO/HO)
   - [ ] Approval granted/rejected
   - [ ] Turn status change
   - [ ] Turn completed
-  - [ ] Vendor assignment notification
-  - [ ] Property update notification
-- [ ] **API routes for email**:
-  - [ ] `/app/api/email/send/route.ts`
-  - [ ] `/app/api/email/batch/route.ts`
-- [ ] Email logs table (track sent emails)
-- [ ] Email activity tracking
-- [ ] Configurable notification preferences per user
-- [ ] Batch email functionality
-
-**Implementation Guide:**
-```typescript
-// /lib/email/resend-service.ts
-import { Resend } from 'resend';
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-// /components/emails/turn-approval.tsx
-export function TurnApprovalEmail({ 
-  turnNumber, 
-  propertyName, 
-  amount, 
-  approverName 
-}) {
-  // React Email template
-}
-
-// Send email in API route
-await resend.emails.send({
-  from: 'Turns Management <noreply@company.com>',
-  to: [approverEmail],
-  subject: `Approval Required: ${turnNumber}`,
-  react: TurnApprovalEmail({ ... }),
-});
-```
-
-**Tech Stack:**
-- **Email Service**: Resend (https://resend.com)
-- **Templates**: React Email components
-- **Tracking**: Store email logs in database
-- **Domain**: Verify domain in Resend dashboard
+  - [ ] Vendor assignment
+  - [ ] Property update
+  - [ ] Utility bill due
+  - [ ] Move out scheduled
+  
+- [ ] **Email Logging**
+  - [ ] Email log table (`turn_email_log`)
+  - [ ] Sent email tracking
+  - [ ] Email status monitoring
+  - [ ] Failed email retry
+  
+- [ ] **Work Order Generation**
+  - [ ] WO template creation
+  - [ ] PDF generation
+  - [ ] Email work orders to vendors
+  - [ ] WO acknowledgment tracking
 
 **Odoo Implementation Reference:**
 - File: `data/mail_template_data.xml`
-- File: `views/email_log_view.xml`
-- Mail activity mixin in models
-
-### 3. Turn Stage Transition Management ✅
-**Priority: CRITICAL**
-- [x] Stage-based workflow engine
-- [x] Stage transition validation rules
-- [x] Automatic status updates
-- [x] Stage duration tracking (`_track_duration_field`)
-- [x] Stage sequence enforcement
-- [x] Required fields per stage
-- [x] Stage transition history
-- [x] Visual stage progression indicator
-- [x] Clickable stage transitions
-
-**Stages from Odoo:**
-1. Draft
-2. Secure Property
-3. Inspection
-4. Scope Review
-5. Vendor Assigned
-6. Turns In Progress
-7. Change Order
-8. Turns Complete
-9. 360 Scan
-
-**Odoo Implementation Reference:**
-- File: `turns_management/models/turns_management.py`
-- Lines: 23-33 (status selection)
-- Line: 42 (`_track_duration_field = 'stage_id'`)
-
-### 4. Audit Logs UI & Integration ✅ COMPLETED
-**Priority: CRITICAL**
-- [x] Backend audit service (`/lib/audit-service.ts`)
-- [x] Audit logs API endpoint (`/api/audit-logs`)
-- [x] Audit log viewer component (`/components/properties/audit-log-viewer.tsx`)
-- [x] **Integrate audit viewer in property detail pages** (who changed what)
-- [ ] **Integrate audit viewer in vendor detail pages**
-- [ ] **Integrate audit viewer in turn detail pages**
-- [x] **Central audit logs page** (`/app/audit-logs/page.tsx`)
-- [x] Navigation menu item for audit logs
-- [x] User activity tracking page
-- [x] Admin view for all users' activities
-- [x] Filtering by user, date, action type
-- [x] Export audit logs to CSV/Excel
-- [x] Search functionality
-- [x] Pagination for large datasets
-- [ ] Real-time updates with React Query
-- [x] Add audit logging to Vendors API
-- [x] Add audit logging to Turns API
-
-**Current Status:**
-- ✅ Backend fully implemented and logging all CRUD operations
-- ✅ AuditLogViewer component integrated in property detail pages
-- ✅ Central audit logs page created with full functionality
-- ✅ Navigation menu item added for audit logs
-- ✅ All APIs (Properties, Vendors, Turns) now have audit logging
-- ✅ CSV export functionality implemented
-- ✅ Advanced filtering and search capabilities added
-- ✅ **Fixed userId type mismatch** - Changed from UUID to text for Better Auth compatibility
-- ✅ **Database schema updated** - Supports both Better Auth and system users
-- ✅ **All audit logging fully functional** - Properties, Vendors, and Turns all tracked
-
-**Completed Implementation:**
-1. **Property Detail Page** (`/app/properties/[id]/page.tsx`):
-   - ✅ AuditLogViewer integrated showing property change history
-   - ✅ Shows who changed what and when
-   - ✅ Displays old vs new values for each change
-   - ✅ Real-time refresh functionality
-   
-2. **Central Audit Logs Page** (`/app/audit-logs/page.tsx`):
-   - ✅ Admin view for all system changes
-   - ✅ User-specific activity view
-   - ✅ CSV export functionality
-   - ✅ Advanced filtering (by table, action, user)
-   - ✅ Search functionality
-   - ✅ Pagination for large datasets
-   - ✅ Beautiful UI with action icons and colors
-
-3. **API Integration:**
-   - ✅ Properties API fully audited
-   - ✅ Vendors API fully audited
-   - ✅ Turns API fully audited
-
-**Still Pending:**
-- Vendor detail page audit viewer integration
-- Turn detail page audit viewer integration (when turn detail page is created)
-- Real-time updates with React Query subscriptions
+- Model: `turn_email_log.py`
+- Field: `generate_wo_email` (Line 91)
 
 ---
 
 ## 🟡 Important Features (Phase 2) - From Odoo
 
-### 4. Reports & Analytics Module ✅
+### 6. Advanced Reporting & Excel Export 🔄
 **Priority: HIGH**
-- [x] Turn completion reports
-- [x] Property performance analytics
-- [x] Vendor performance reports
-- [x] Financial summary reports
-- [x] Turn duration analytics
-- [x] Excel export (XLSX)
-- [x] PDF export
-- [x] Custom date range filters
-- [ ] Scheduled report generation
-- [ ] Dashboard widgets configuration
+**Status: PARTIALLY IMPLEMENTED**
+
+- [x] Basic reports (Turn, Property, Vendor, Financial)
+- [x] Charts and visualizations
+- [x] Date range filtering
+- [ ] **Excel Export Features**
+  - [ ] XLSX report generation
+  - [ ] Custom report templates
+  - [ ] Scheduled report generation
+  - [ ] Email report delivery
+  
+- [ ] **Vendor Reports**
+  - [ ] Performance scoring
+  - [ ] Detailed analytics
+  - [ ] Comparison reports
+  
+- [ ] **Spreadsheet Dashboards**
+  - [ ] Interactive pivot tables
+  - [ ] Custom dashboard creation
+  - [ ] Widget configuration
 
 **Odoo Implementation Reference:**
 - Module: `report_xlsx`
+- Module: `turns_report`
 - Module: `spreadsheet_dashboard_turns`
 
-### 5. Document Management System ❌
+### 7. Inspector Role & Inspection Management ❌
 **Priority: HIGH**
-- [ ] File upload interface
-- [ ] Document categorization
-- [ ] Version control
-- [ ] Document preview
-- [ ] Bulk upload
-- [ ] Document search
-- [ ] Access control
-- [ ] Document expiry tracking
-- [ ] Attachment to turns/properties/vendors
+**Status: NOT STARTED**
 
-**Database tables exist but no UI:**
-- `documents` table in schema
-
-### 6. Change Order Workflow ❌
-**Priority: HIGH**
-- [ ] Change order creation form
-- [ ] Change order approval process
-- [ ] Amount tracking (`change_order_amount` field)
-- [ ] Change order history
-- [ ] Reason documentation
-- [ ] Impact on timeline
-- [ ] Vendor notification
-- [ ] Cost adjustment automation
+- [ ] **Inspector User Role**
+  - [ ] Role creation and permissions
+  - [ ] Inspector assignment to turns
+  
+- [ ] **Inspection Workflow**
+  - [ ] Inspection scheduling
+  - [ ] Inspection datetime tracking
+  - [ ] Inspector assignment
+  - [ ] Inspection checklist
+  
+- [ ] **Inspection Documentation**
+  - [ ] Photo attachments
+  - [ ] Inspection reports
+  - [ ] Scope creation from inspection
+  - [ ] Issue tracking
 
 **Odoo Implementation Reference:**
-- File: `turns_management/models/turns_management.py`
-- Line: 84 (`change_order_amount` field)
+- Fields: `inspection_datetime`, `inspection_user` (Lines 58-59)
+- Stage: 'inspection' in workflow
 
-### 7. Property Secure Wizard ❌
+### 8. Vendor Management Extensions ❌
 **Priority: HIGH**
-- [ ] Secure property wizard UI
-- [ ] Lock box code management
-- [ ] Lock box location tracking
-- [ ] Code change history
-- [ ] Security checklist
-- [ ] Access log tracking
+**Status: NOT STARTED**
+
+- [ ] **Flooring Vendor Tracking**
+  - [ ] Separate flooring vendor field
+  - [ ] Flooring-specific workflows
+  
+- [ ] **Turns Superintendent**
+  - [ ] Superintendent assignment
+  - [ ] Superintendent dashboard
+  - [ ] Work supervision tracking
+  
+- [ ] **Vendor Performance**
+  - [ ] Performance scoring algorithm
+  - [ ] Rating system
+  - [ ] Performance reports
+  - [ ] Vendor comparison
 
 **Odoo Implementation Reference:**
-- File: `wizards/secure_property.py`
-- File: `wizards/secure_property_view.xml`
-- Database: `lock_box_history` table exists
+- Field: `assigned_flooring_vendor` (Line 89)
+- Field: `assigned_turns_superintendent` (Line 88)
+
+### 9. Financial Management Extensions ❌
+**Priority: HIGH**
+**Status: NOT STARTED**
+
+- [ ] **Daily Cost Tracking**
+  - [ ] Daily holding cost configuration
+  - [ ] Automatic accumulation
+  - [ ] Cost alerts
+  
+- [ ] **Advanced Amount Tracking**
+  - [ ] Turn amount
+  - [ ] Approved turn amount
+  - [ ] Change order amount
+  - [ ] Total turn amount calculation
+  
+- [ ] **Budget Management**
+  - [ ] Budget vs actual tracking
+  - [ ] Cost overrun alerts
+  - [ ] Financial approval workflows
+
+**Odoo Implementation Reference:**
+- Fields: Lines 81-86 (various amount fields)
+- Field: `daily_cost` (Line 81)
 
 ---
 
 ## 🟢 Enhancement Features (Phase 3) - From Odoo
 
-### 8. Activity & Task Management ❌
+### 10. Advanced Turn Features ❌
 **Priority: MEDIUM**
-- [ ] Activity scheduling
-- [ ] Task assignments
-- [ ] Due date reminders
-- [ ] Follow-up tracking
-- [ ] Activity templates
-- [ ] Recurring tasks
-- [ ] Task priorities
-- [ ] Activity calendar view
+**Status: NOT STARTED**
+
+- [ ] **Additional Date Tracking**
+  - [ ] Punch list date
+  - [ ] Scope approved date
+  - [ ] Final walk date
+  - [ ] Leasing date
+  - [ ] Turn assignment date
+  
+- [ ] **Utility Status Tracking**
+  - [ ] Power status (Yes/No + Notes)
+  - [ ] Water status (Yes/No + Notes)
+  - [ ] Gas status (Yes/No + Notes)
+  
+- [ ] **Appliance Management**
+  - [ ] Appliances needed flag
+  - [ ] Appliances ordered tracking
+  - [ ] Appliance vendor management
+  
+- [ ] **360 Scan Integration**
+  - [ ] Order InsideMaps/360 scan
+  - [ ] Scan date tracking
+  - [ ] Scan document storage
+  - [ ] Scan viewer integration
 
 **Odoo Implementation Reference:**
-- Mail activity mixin: `mail.activity.mixin`
+- Fields: Lines 74-80, 90-96, 120-127
+
+### 11. Rejection Workflow ❌
+**Priority: MEDIUM**
+**Status: NOT STARTED**
+
+- [ ] **Rejection Wizard**
+  - [ ] Rejection reason capture
+  - [ ] Rejection user tracking
+  - [ ] Rejection datetime
+  - [ ] Rejection text storage
+  
+- [ ] **Rejection Notifications**
+  - [ ] Email templates for rejection
+  - [ ] Rejection history tracking
+  - [ ] Re-submission workflow
+
+**Odoo Implementation Reference:**
+- Wizard: `reject_reason_wizard.py`
+- Fields: Lines 69-70, 155
+
+### 12. Activity & Task Management ❌
+**Priority: MEDIUM**
+**Status: NOT STARTED**
+
+- [ ] **Activity System**
+  - [ ] Activity types configuration
+  - [ ] Activity scheduling
+  - [ ] Due date management
+  - [ ] Activity assignment
+  
+- [ ] **Follow-up Management**
+  - [ ] Follow-up scheduling
+  - [ ] Reminder system
+  - [ ] Activity templates
+  - [ ] Recurring activities
+
+**Odoo Implementation Reference:**
+- Mixin: `mail.activity.mixin`
 - File: `data/mail_activity_type_data.xml`
 
-### 9. Inspector Role & Management ❌
+### 13. Property Extensions ❌
 **Priority: MEDIUM**
-- [ ] Inspector user role
-- [ ] Inspection assignment
-- [ ] Inspection scheduling
-- [ ] Inspection reports
-- [ ] Inspection checklist
-- [ ] Photo attachment
-- [ ] Inspection history
-- [ ] Inspector performance metrics
+**Status: NOT STARTED**
+
+- [ ] **Property Grouping**
+  - [ ] Core/Non-Core classification
+  - [ ] Market assignment
+  - [ ] Property type categorization
+  
+- [ ] **Additional Fields**
+  - [ ] Year built selection
+  - [ ] Occupancy check date
+  - [ ] County tracking
+  - [ ] Color coding for visual organization
 
 **Odoo Implementation Reference:**
-- File: `turns_management/models/turns_management.py`
-- Lines: 58-59 (inspection fields)
-
-### 10. Work Order Generation ❌
-**Priority: MEDIUM**
-- [ ] WO templates
-- [ ] PDF generation
-- [ ] Auto-numbering
-- [ ] Email work orders
-- [ ] Digital signatures
-- [ ] Work order tracking
-- [ ] Vendor acknowledgment
-- [ ] Work order history
-
-**Odoo Implementation Reference:**
-- Line: 91 (`generate_wo_email` field)
-
-### 11. Turn Forms (Create/Edit) 🔄
-**Priority: MEDIUM**
-- [x] Create Turn Dialog (basic exists)
-- [ ] Advanced turn creation with all fields
-- [ ] Property selection with filters
-- [ ] Vendor assignment with availability check
-- [ ] Cost estimation with breakdown
-- [ ] Scope of work rich text editor
-- [ ] Utility status checkboxes
-- [ ] Appliances needed tracking
-- [ ] Turn history in edit form
-
----
-
-## 🟠 Scalability & Performance Features (Critical for Production)
-
-### 17. Scalable Search & Pagination ✅ READY
-**Priority: CRITICAL for large datasets**
-- [x] Server-side search API endpoint with pagination
-- [x] Database query optimization with proper indexes  
-- [x] Custom `useServerSearch` hook with debouncing
-- [x] Optimized properties page (`/properties/optimized`)
-- [ ] Apply to vendors page
-- [ ] Apply to turns page
-- [ ] PostgreSQL full-text search migration
-- [ ] PostgreSQL trigram search for fuzzy matching
-- [ ] Redis caching layer for popular searches
-- [ ] Elasticsearch/Algolia integration for instant search
-
-**Current Implementation:**
-- Basic ILIKE search works for small datasets
-- Server-side pagination limits data transfer
-- React Query caching reduces server load
-- Debounced search prevents excessive API calls
-
-**Production Optimizations Needed:**
-```sql
--- Add GIN indexes for fast search
-CREATE INDEX idx_properties_search ON properties 
-USING GIN (to_tsvector('english', name || ' ' || address || ' ' || city));
-
--- Enable trigram for fuzzy search
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX trgm_idx ON properties USING GIN (name gin_trgm_ops);
-```
-
-**Performance Targets:**
-- Handle 100,000+ properties with <100ms search response
-- Support concurrent searches from 1000+ users
-- Maintain 99.9% uptime with proper caching
-
-**Files Created:**
-- `/app/api/properties/search/route.ts` - Server-side search endpoint
-- `/hooks/use-server-search.ts` - Reusable search hook
-- `/app/properties/optimized/page.tsx` - Scalable properties page
+- Module: `property`
+- Various related fields in turns_management.py
 
 ---
 
 ## 🔵 Minor Features (Phase 4) - From Odoo
 
-### 12. Turn Numbering Sequence ❌
+### 14. Turn Numbering & Sequences ❌
 **Priority: LOW**
-- [ ] Automatic sequence generation (TURN-YYYY-XXX)
-- [ ] Configurable format
-- [ ] Year-based reset option
-- [ ] Sequence preview
+**Status: NOT STARTED**
+
+- [ ] Automatic sequence generation
+- [ ] Format: TURN-YYYY-XXXXX
+- [ ] Configurable sequences
+- [ ] Year-based reset
 
 **Odoo Implementation Reference:**
 - File: `data/ir_sequence_data.xml`
+- Default name: 'New_' (Line 44)
 
-### 13. YARDI Integration ❌
+### 15. Color Coding & Visual Indicators ❌
 **Priority: LOW**
-- [ ] YARDI status sync
-- [ ] Property ID mapping
-- [ ] Data import/export
-- [ ] Sync scheduling
-- [ ] Error handling
-- [ ] Sync logs
+**Status: NOT STARTED**
 
-**Database fields exist:**
-- `property_id_yardi` in properties table
-- `status_yardi` field
-
-### 14. Daily Cost Calculation ❌
-**Priority: LOW**
-- [ ] Daily holding cost configuration
-- [ ] Automatic cost calculation
-- [ ] Cost accumulation tracking
-- [ ] Cost reports
-- [ ] Cost alerts
+- [ ] Color field for turns
+- [ ] Property color coding
+- [ ] Status-based colors
+- [ ] Visual priority indicators
 
 **Odoo Implementation Reference:**
-- Line: 81 (`daily_cost` field)
+- Fields: `color`, `color1` (Lines 110-111)
 
-### 15. 360 Scan Integration ❌
+### 16. Cron Jobs & Automation ❌
 **Priority: LOW**
-- [ ] InsideMaps integration
-- [ ] 360 scan ordering
-- [ ] Scan status tracking
-- [ ] Scan viewer embed
-- [ ] Scan history
+**Status: NOT STARTED**
+
+- [ ] Scheduled tasks configuration
+- [ ] Automated reminders
+- [ ] Data sync jobs
+- [ ] Cleanup tasks
+- [ ] Report generation schedules
 
 **Odoo Implementation Reference:**
-- Line: 90 (`order_insidemaps_360_scan` field)
-- Line: 79 (`scan_360_date` field)
+- File: `data/ir_cron.xml`
 
-### 16. Advanced Utilities Management ❌
+### 17. Multi-Company Support ❌
 **Priority: LOW**
-- [ ] Detailed utility provider management
-- [ ] Account number tracking
-- [ ] Deposit tracking
-- [ ] Utility transfer workflow
-- [ ] Well water/septic tracking
-- [ ] Utility cost tracking
+**Status: NOT STARTED**
 
-**Database tables exist:**
-- `utility_providers` table
-- `property_utilities` table with detailed fields
+- [ ] Company configuration
+- [ ] Company-specific settings
+- [ ] Multi-company data isolation
+- [ ] Company selection in UI
+
+**Odoo Implementation Reference:**
+- Model: `res_company.py`
+- Model: `res_config_settings.py`
 
 ---
 
 ## 📊 Implementation Progress
 
-| Phase | Total Features | Completed | In Progress | Not Started | Progress |
-|-------|---------------|-----------|-------------|-------------|----------|
-| Phase 1 (Critical) | 4 | 1 | 1 | 2 | 37% |
-| Phase 2 (Important) | 4 | 0 | 0 | 4 | 0% |
-| Phase 3 (Enhancement) | 4 | 0 | 0 | 4 | 0% |
-| Phase 4 (Minor) | 5 | 0 | 0 | 5 | 0% |
-| **Total** | **17** | **1** | **1** | **15** | **9%** |
+| Category | Total Features | Completed | In Progress | Not Started | Progress |
+|----------|---------------|-----------|-------------|-------------|----------|
+| Critical (Phase 1) | 5 | 0 | 1 | 4 | 10% |
+| Important (Phase 2) | 4 | 0 | 1 | 3 | 12.5% |
+| Enhancement (Phase 3) | 4 | 0 | 0 | 4 | 0% |
+| Minor (Phase 4) | 4 | 0 | 0 | 4 | 0% |
+| **Total** | **17** | **0** | **2** | **15** | **6%** |
 
 ---
 
-## 📝 Implementation Notes
+## 📝 Technical Implementation Notes
 
-### Database Schema Status
-Many required fields and tables already exist in the schema but lack UI implementation:
-- ✅ Approval fields in `turns` table
-- ✅ `documents` table for file management
-- ✅ `lock_box_history` table for security tracking
-- ✅ `turn_history` table for status tracking
-- ✅ `audit_logs` table for tracking changes
-- ✅ `utility_providers` and `property_utilities` tables
-- ✅ All date fields for turn lifecycle
+### Database Tables Already Created
+These tables exist in our schema but need UI implementation:
+- ✅ `utility_providers` - Ready for utility module
+- ✅ `property_utilities` - Ready for utility tracking
+- ✅ `lock_box_history` - Ready for lock box management
+- ✅ `turn_history` - Ready for turn tracking
+- ✅ `documents` - Ready for document management
+- ✅ `audit_logs` - Fully implemented
+- ✅ `approvals` - Backend complete, UI pending
+- ✅ `approval_thresholds` - Backend complete
 
-### Missing Odoo Modules Not Yet Analyzed
-- `property` module (base property management)
-- `hide_action_archive_button` module
-- `data_import_models` module
-- Various theme modules (muk_web_*, artify_backend_theme, etc.)
+### Missing Database Tables
+These need to be created:
+- ❌ `move_out_schedule` - For move out management
+- ❌ `turn_email_log` - For email tracking
+- ❌ `property_utility_bill` - For utility bills
+- ❌ `utility_bank_payments` - For payment tracking
+- ❌ `mail_activity` - For activity management
+- ❌ `work_orders` - For WO generation
 
-### Technical Debt from Migration
-- Mock data still in use for dashboard and turns
-- Kanban board not persisting stage changes
-- No real-time sync (was considering Electric SQL, now removed)
-- React Query cache not optimized for complex workflows
-- ✅ **Fixed:** Better Auth session handling (using auth-helpers with proper getSession)
-- ✅ **Fixed:** Database insert issues (propertyId generation and nullable userId in audit logs)
-- ✅ **Fixed:** User profile/settings not showing real user data
-- ✅ **Fixed:** Navigation showing mock data instead of session data
+### Odoo Modules Analyzed
+- ✅ `turns_management` - Main turns module
+- ✅ `property_utility_bill` - Utility billing
+- ✅ `move_out_prt_schedule` - Move out scheduling
+- ✅ `utility_management` - Utility management
+- ✅ `turns_report` - Reporting module
+- ✅ `onedrive_integration_odoo` - OneDrive sync
+- ✅ `report_xlsx` - Excel reports
+- ✅ `property` - Property management base
 
-### Dependencies Needed
-- **Email Service**: ✅ **Resend** (decided) - for all email notifications
-  - `npm install resend react-email @react-email/components`
-- **File Storage**: S3, Azure Blob Storage, or Cloudinary for documents
-- **PDF Generation**: react-pdf or puppeteer for reports
-- **Excel Export**: exceljs or xlsx library
-- **Rich Text Editor**: TipTap or Slate for scope of work editing
-- **Calendar Component**: For scheduling and activity management
+### API Endpoints Needed
+- `/api/utilities` - Utility bill CRUD
+- `/api/utilities/providers` - Provider management
+- `/api/utilities/payments` - Payment processing
+- `/api/lockbox` - Lock box management
+- `/api/moveout` - Move out scheduling
+- `/api/documents/onedrive` - OneDrive sync
+- `/api/inspections` - Inspection management
+- `/api/activities` - Activity tracking
+- `/api/workorders` - Work order generation
 
 ---
 
 ## 🚀 Recommended Implementation Order
 
-### Week 1: Core Workflow
-1. **Approval Workflow System** - Critical for business operations
-2. **Turn Stage Transitions** - Essential for turn lifecycle
-3. **Email Notifications** - Required for approval workflow
+### Sprint 1 (Week 1-2): Utility Management
+1. Create utility bill tables and schema
+2. Build utility provider management
+3. Implement bill CRUD operations
+4. Add payment processing
+5. Create utility reports
 
-### Week 2: Data & Documents
-4. **Reports & Analytics** - Needed for business insights
-5. **Document Management** - Required for attachments
-6. **Change Orders** - Important for cost tracking
+### Sprint 2 (Week 3-4): Document Management
+1. Implement OneDrive OAuth
+2. Create document upload system
+3. Add document categorization
+4. Build sync functionality
+5. Add document search
 
-### Week 3: Enhanced Features
-7. **Property Security** - Important for operations
-8. **Activity Management** - For task tracking
-9. **Inspector Management** - For quality control
-10. **Work Order Generation** - For vendor communication
+### Sprint 3 (Week 5-6): Lock Box & Security
+1. Build lock box management UI
+2. Add code history tracking
+3. Create secure property wizard
+4. Implement access logs
+5. Add lock box reports
 
-### Week 4: Polish & Integration
-11. **Turn Numbering** - For organization
-12. **Daily Cost Tracking** - For financial analysis
-13. **360 Scan Integration** - For property visualization
-14. **YARDI Integration** - If needed
-15. **Advanced Utilities** - Complete utility management
-
----
-
-## 🔧 Next Immediate Steps
-
-1. ✅ **DONE: Approval Workflow Backend** - Database schema and API endpoints completed
-2. **Create approval UI components** in turn details (remaining UI work)
-3. **Implement email service** for notifications using Resend
-4. **Add stage transition logic** to kanban board
-5. **Create workflow configuration page** for admin users
+### Sprint 4 (Week 7-8): Enhanced Workflows
+1. Add move out scheduling
+2. Implement inspection management
+3. Create rejection wizard
+4. Add activity management
+5. Build work order generation
 
 ---
 
 ## 🆕 Recently Completed Features
 
-### Global Search System ✅
+### Reports & Analytics Module ✅
 **Completed: January 2025**
-- [x] Basic search API with ILIKE pattern matching
-- [x] Search across properties, turns, vendors, and users
-- [x] Global search component with dropdown results
-- [x] Keyboard shortcut support (Cmd/Ctrl + K)
-- [x] Mobile-responsive search with sheet modal
-- [x] Debounced search input
-- [x] Advanced PostgreSQL full-text search prepared (optional upgrade)
-  - Full-text search vectors with weighted ranking
-  - Trigram similarity for typo tolerance
-  - Database migration script ready
+- [x] Turn completion reports with charts
+- [x] Property performance analytics
+- [x] Vendor performance reports
+- [x] Financial summary reports
+- [x] React Query integration
+- [x] Date range filtering
+- [x] Export to Excel/PDF buttons (UI ready)
 
-### User Profile & Settings ✅
+### Password Change Functionality ✅
 **Completed: January 2025**
-- [x] Profile page with real user data from Better Auth
-- [x] Settings page restructured (removed duplicate profile section)
-- [x] User preferences API and storage
-- [x] Password change functionality
-- [x] Navigation showing real session data (no more mock data)
-- [x] Profile statistics and activity tracking
+- [x] Password update API endpoint
+- [x] Better Auth integration
+- [x] Current password validation
+- [x] Password strength requirements
 
-### Approval Workflow Backend ✅
+### Build Issues Fixed ✅
 **Completed: January 2025**
-- [x] Complete database schema for approvals
-- [x] Approval thresholds configuration table
-- [x] Full CRUD API for approvals and thresholds
-- [x] DFO approval ($3000-$9999.99)
-- [x] HO approval ($10000+)
-- [x] Sequential approval support
-- [x] Rejection reason tracking
-- [x] Audit logging integration
-- [x] Seed data for default thresholds
+- [x] TypeScript errors resolved
+- [x] Dynamic import warnings fixed
+- [x] Enum value mismatches corrected
+- [x] PostgreSQL query errors fixed
+- [x] Timestamp casting issues resolved
+
+---
+
+## 🔧 Next Immediate Steps
+
+1. **Implement Utility Management Module**
+   - Most requested feature from Odoo
+   - Critical for property operations
+   - Database tables already exist
+
+2. **Add OneDrive Integration**
+   - Document sync is essential
+   - Multiple modules depend on this
+
+3. **Build Lock Box Management**
+   - Security is critical
+   - History tracking needed
+
+4. **Complete Email Templates**
+   - Approval notifications
+   - Status change alerts
+   - Work order emails
+
+5. **Add Excel Export to Reports**
+   - Already have the UI buttons
+   - Just need to implement the export logic
 
 ---
 
 *Last Updated: January 2025*
 *Odoo reference path: `/Users/arunavoray/Documents/Development/Decyphr/TurnsManagement/decyphr_turns`*
+*Next.js app path: `/Users/arunavoray/Documents/Development/Decyphr/TurnsManagement/turns-management`*
