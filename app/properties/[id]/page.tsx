@@ -30,6 +30,7 @@ import { formatCurrency } from "@/lib/mock-data";
 import { fetchProperty, deleteProperty, propertyKeys } from "@/lib/api/properties";
 import { toast } from "sonner";
 import AuditLogViewer from "@/components/properties/audit-log-viewer";
+import { LockBoxSection } from "@/components/properties/lock-box-section";
 
 
 export default function PropertyDetailsPage() {
@@ -363,6 +364,9 @@ export default function PropertyDetailsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Lock Box Section */}
+        <LockBoxSection property={property} />
 
         {/* Audit Log */}
         <AuditLogViewer propertyId={propertyId} limit={10} />

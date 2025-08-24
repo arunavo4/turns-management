@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, Calendar, CheckCircle, Clock, DollarSign, Home, User, XCircle, AlertTriangle, FileText, MapPin } from "lucide-react";
+import { AlertCircle, Calendar, CheckCircle, Clock, DollarSign, Home, User, XCircle, AlertTriangle, FileText, MapPin, Lock, Eye, EyeOff } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { StageProgress } from "@/components/turns/stage-progress";
@@ -30,6 +30,10 @@ interface Property {
   city: string;
   state: string;
   zipCode: string;
+  primaryLockBoxCode?: string;
+  lockBoxLocation?: string;
+  lockBoxInstallDate?: number;
+  lockBoxNotes?: string;
 }
 
 interface Approver {
@@ -91,6 +95,7 @@ export default function TurnDetailPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
   const [stages, setStages] = useState<Stage[]>([]);
+  const [lockBoxVisible, setLockBoxVisible] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -333,6 +338,84 @@ export default function TurnDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Lock Box Information */}
+          {(turn.property.primaryLockBoxCode || turn.property.lockBoxLocation) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  Lock Box Information
+                  <Badge variant="secondary">Security Access</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {turn.property.primaryLockBoxCode && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Lock Box Code</p>
+                      <div className="flex items-center gap-2">
+                        <div className="font-mono text-base bg-muted px-3 py-1 rounded">
+                          {lockBoxVisible 
+                            ? turn.property.primaryLockBoxCode
+                            : '•'.repeat(turn.property.primaryLockBoxCode.length)
+                          }
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setLockBoxVisible(!lockBoxVisible)}
+                        >
+                          {lockBoxVisible ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {turn.property.lockBoxLocation && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Location</p>
+                      <p className="text-base flex items-center gap-1">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        {turn.property.lockBoxLocation.charAt(0).toUpperCase() + turn.property.lockBoxLocation.slice(1)} Door
+                      </p>
+                    </div>
+                  )}
+                  
+                  {turn.property.lockBoxInstallDate && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Install Date</p>
+                      <p className="text-base flex items-center gap-1">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        {format(new Date(turn.property.lockBoxInstallDate), "MMM dd, yyyy")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {turn.property.lockBoxNotes && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-muted-foreground mb-2">Lock Box Notes</p>
+                    <div className="p-3 bg-muted rounded-md">
+                      <p className="text-sm">{turn.property.lockBoxNotes}</p>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-sm text-yellow-800 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    This information is sensitive and logged for security purposes
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Turn Details Tabs */}
           <Tabs defaultValue="details" className="w-full">

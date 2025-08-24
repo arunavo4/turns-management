@@ -23,6 +23,7 @@ import {
   IconChevronRight,
   IconHistory,
   IconBolt,
+  IconLock,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -105,6 +106,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       name: "Utilities", 
       href: "/utilities", 
       icon: IconBolt, 
+      badge: null 
+    },
+    { 
+      name: "Lock Box", 
+      href: "/lockbox", 
+      icon: IconLock, 
       badge: null 
     },
     { 

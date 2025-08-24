@@ -110,7 +110,7 @@ export async function POST(
     };
 
     // Track what changed for history
-    let historyEntry: Partial<typeof lockBoxHistory.$inferInsert> = {
+    const historyEntry: Partial<typeof lockBoxHistory.$inferInsert> = {
       propertyId: id,
       changeDate: Date.now(),
       changedBy: session.user.id,
