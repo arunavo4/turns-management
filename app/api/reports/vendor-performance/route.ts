@@ -152,19 +152,19 @@ export async function GET(request: NextRequest) {
       const trendData = await db
         .select({
           vendorId: turns.vendorId,
-          month: sql<string>`TO_CHAR(${turns.createdAt}, 'YYYY-MM')`,
+          month: sql<string>`TO_CHAR(TO_TIMESTAMP(${turns.createdAt}::bigint / 1000), 'YYYY-MM')`,
           turnCount: sql<number>`COUNT(${turns.id})`,
           revenue: sql<number>`COALESCE(SUM(${turns.actualCost}), 0)`,
         })
         .from(turns)
         .where(
           and(
-            sql`${turns.vendorId} = ANY(${topVendorIds})`,
+            sql`${turns.vendorId} = ANY(ARRAY[${sql.raw(topVendorIds.map((id: string) => `'${id}'::uuid`).join(','))}])`,
             dateFilter as any
           )
         )
-        .groupBy(turns.vendorId, sql`TO_CHAR(${turns.createdAt}, 'YYYY-MM')`)
-        .orderBy(sql`TO_CHAR(${turns.createdAt}, 'YYYY-MM')`);
+        .groupBy(turns.vendorId, sql`TO_CHAR(TO_TIMESTAMP(${turns.createdAt}::bigint / 1000), 'YYYY-MM')`)
+        .orderBy(sql`TO_CHAR(TO_TIMESTAMP(${turns.createdAt}::bigint / 1000), 'YYYY-MM')`);
 
       trendData.forEach((row: any) => {
         const vendorName = vendorMetrics.find((v: any) => v.vendorId === row.vendorId)?.vendorName || "Unknown";
