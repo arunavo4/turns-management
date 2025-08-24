@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
         inProgressTurns: sql<number>`
           COUNT(CASE WHEN ${turns.status} = 'in_progress' THEN 1 END)
         `,
-        pendingApprovalTurns: sql<number>`
-          COUNT(CASE WHEN ${turns.status} = 'pending_approval' THEN 1 END)
+        draftTurns: sql<number>`
+          COUNT(CASE WHEN ${turns.status} = 'draft' THEN 1 END)
         `,
       })
       .from(turns)

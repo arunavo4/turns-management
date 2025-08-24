@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
         inProgressTurns: sql<number>`
           COUNT(CASE WHEN ${turns.status} = 'in_progress' THEN 1 END)
         `,
-        cancelledTurns: sql<number>`
-          COUNT(CASE WHEN ${turns.status} = 'cancelled' THEN 1 END)
+        changeOrderTurns: sql<number>`
+          COUNT(CASE WHEN ${turns.status} = 'change_order' THEN 1 END)
         `,
         totalRevenue: sql<number>`
           COALESCE(SUM(${turns.actualCost}), 0)
