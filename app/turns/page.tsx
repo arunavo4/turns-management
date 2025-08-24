@@ -153,13 +153,13 @@ const createTurn = async (turnData: any) => {
   return response.json();
 };
 
-const updateTurnStage = async ({ turnId, updates }: { turnId: string; updates: any }) => {
-  const response = await fetch(`/api/turns/${turnId}`, {
-    method: 'PATCH',
+const updateTurnStage = async ({ turnId, toStageId, reason }: { turnId: string; toStageId: string; reason?: string }) => {
+  const response = await fetch(`/api/turns/${turnId}/transition`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
+    body: JSON.stringify({ toStageId, reason }),
   });
-  if (!response.ok) throw new Error('Failed to update turn');
+  if (!response.ok) throw new Error('Failed to update turn stage');
   return response.json();
 };
 
@@ -268,7 +268,7 @@ export default function TurnsPage() {
 
   const updateStageMutation = useMutation({
     mutationFn: updateTurnStage,
-    onMutate: async ({ turnId, updates }) => {
+    onMutate: async ({ turnId, toStageId }) => {
       await queryClient.cancelQueries({ queryKey: ['turns'] });
       
       const previousTurns = queryClient.getQueryData(['turns']);
@@ -277,7 +277,7 @@ export default function TurnsPage() {
       queryClient.setQueryData(['turns'], (old: Turn[] = []) => 
         old.map(turnData => 
           turnData.turn.id === turnId 
-            ? { ...turnData, turn: { ...turnData.turn, ...updates } }
+            ? { ...turnData, turn: { ...turnData.turn, stageId: toStageId } }
             : turnData
         )
       );
@@ -312,16 +312,11 @@ export default function TurnsPage() {
   };
 
   const handleStageChange = (turnId: string, newStageId: string) => {
-    const newStage = stages.find(s => s.id === newStageId);
-    if (newStage) {
-      updateStageMutation.mutate({
-        turnId,
-        updates: {
-          stageId: newStageId,
-          status: newStage.key || 'draft'
-        }
-      });
-    }
+    updateStageMutation.mutate({
+      turnId,
+      toStageId: newStageId,
+      reason: 'Manual stage transition from Kanban board'
+    });
   };
 
   // Filter and sort turns

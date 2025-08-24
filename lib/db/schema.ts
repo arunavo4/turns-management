@@ -294,11 +294,29 @@ export const vendors = pgTable('vendors', {
 export const turnStages = pgTable('turn_stages', {
   ...baseColumns,
   name: varchar('name', { length: 100 }).notNull().unique(),
+  slug: varchar('slug', { length: 255 }).unique().notNull(),
   sequence: integer('sequence').notNull(),
   description: text('description'),
+  color: varchar('color', { length: 7 }).default('#6B7280'),
+  icon: varchar('icon', { length: 50 }),
   isActive: boolean('is_active').default(true),
   requiresApproval: boolean('requires_approval').default(false),
-  approvalThreshold: decimal('approval_threshold', { precision: 10, scale: 2 })
+  approvalThreshold: decimal('approval_threshold', { precision: 10, scale: 2 }),
+  requiredFields: text('required_fields').array(),
+  allowedTransitions: uuid('allowed_transitions').array(),
+  autoStatus: varchar('auto_status', { length: 50 })
+});
+
+// Turn stage history table
+export const turnStageHistory = pgTable('turn_stage_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  turnId: uuid('turn_id').notNull().references(() => turns.id, { onDelete: 'cascade' }),
+  fromStageId: uuid('from_stage_id').references(() => turnStages.id),
+  toStageId: uuid('to_stage_id').notNull().references(() => turnStages.id),
+  transitionedBy: varchar('transitioned_by', { length: 255 }).notNull(),
+  transitionReason: text('transition_reason'),
+  durationInStage: bigint('duration_in_stage', { mode: 'number' }),
+  createdAt: bigint('created_at', { mode: 'number' }).$defaultFn(() => Date.now()).notNull()
 });
 
 // Turns table
@@ -309,6 +327,8 @@ export const turns = pgTable('turns', {
   status: turnStatusEnum('status').default('draft'),
   priority: turnPriorityEnum('priority').default('medium'),
   stageId: uuid('stage_id').references(() => turnStages.id),
+  stageEnteredAt: bigint('stage_entered_at', { mode: 'number' }),
+  stageDuration: bigint('stage_duration', { mode: 'number' }), // Time spent in current stage (ms)
   
   // Dates
   moveOutDate: bigint('move_out_date', { mode: 'number' }),

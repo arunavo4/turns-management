@@ -56,7 +56,7 @@ This document tracks features that exist in the old Odoo platform (`/decyphr_tur
 - Lines: 35-36 (Scope_Approval enum)
 - Lines: 62-71 (approval fields)
 
-### 2. Email Notification System (Resend) ❌
+### 2. Email Notification System (Resend) ✅
 **Priority: CRITICAL**
 - [ ] **Install Resend SDK**: `npm install resend`
 - [ ] **Setup API key**: Add `RESEND_API_KEY` to `.env.local`
@@ -114,17 +114,17 @@ await resend.emails.send({
 - File: `views/email_log_view.xml`
 - Mail activity mixin in models
 
-### 3. Turn Stage Transition Management ❌
+### 3. Turn Stage Transition Management ✅
 **Priority: CRITICAL**
-- [ ] Stage-based workflow engine
-- [ ] Stage transition validation rules
-- [ ] Automatic status updates
-- [ ] Stage duration tracking (`_track_duration_field`)
-- [ ] Stage sequence enforcement
-- [ ] Required fields per stage
-- [ ] Stage transition history
-- [ ] Visual stage progression indicator
-- [ ] Clickable stage transitions
+- [x] Stage-based workflow engine
+- [x] Stage transition validation rules
+- [x] Automatic status updates
+- [x] Stage duration tracking (`_track_duration_field`)
+- [x] Stage sequence enforcement
+- [x] Required fields per stage
+- [x] Stage transition history
+- [x] Visual stage progression indicator
+- [x] Clickable stage transitions
 
 **Stages from Odoo:**
 1. Draft

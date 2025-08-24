@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertCircle, Calendar, CheckCircle, Clock, DollarSign, Home, User, XCircle, AlertTriangle, FileText, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { StageProgress } from "@/components/turns/stage-progress";
 
 interface Vendor {
   id: string;
@@ -46,10 +47,20 @@ interface ApprovalHistory {
   approver: Approver;
 }
 
+interface Stage {
+  id: string;
+  name: string;
+  slug: string;
+  sequence: number;
+  color: string;
+  icon?: string;
+}
+
 interface Turn {
   id: string;
   propertyId: string;
-  stage: string;
+  stageId: string | null;
+  stage: Stage | null;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "ON_HOLD";
   assignedVendorId: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
@@ -79,11 +90,13 @@ export default function TurnDetailPage() {
   const [approvalComment, setApprovalComment] = useState("");
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
+  const [stages, setStages] = useState<Stage[]>([]);
 
   useEffect(() => {
     if (params.id) {
       fetchTurnDetails();
       fetchVendors();
+      fetchStages();
     }
   }, [params.id]);
 
@@ -110,6 +123,17 @@ export default function TurnDetailPage() {
       setVendors(data);
     } catch (error) {
       console.error("Error fetching vendors:", error);
+    }
+  };
+
+  const fetchStages = async () => {
+    try {
+      const response = await fetch("/api/turn-stages");
+      if (!response.ok) throw new Error("Failed to fetch stages");
+      const data = await response.json();
+      setStages(data);
+    } catch (error) {
+      console.error("Error fetching stages:", error);
     }
   };
 
@@ -262,6 +286,22 @@ export default function TurnDetailPage() {
           </Badge>
         )}
       </div>
+
+      {/* Stage Progress */}
+      {stages.length > 0 && turn.stageId && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Turn Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StageProgress 
+              stages={stages}
+              currentStageId={turn.stageId}
+              showLabels={true}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-3">
         {/* Main Content - 2 columns */}
