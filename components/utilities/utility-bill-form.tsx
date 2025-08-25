@@ -159,12 +159,17 @@ export function UtilityBillForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">No Provider</SelectItem>
-                        {providers.map((provider) => (
-                          <SelectItem key={provider.id} value={provider.id}>
-                            {provider.name} ({provider.type})
-                          </SelectItem>
-                        ))}
+                        {providers.length === 0 ? (
+                          <div className="p-2 text-sm text-muted-foreground">
+                            No providers available
+                          </div>
+                        ) : (
+                          providers.map((provider) => (
+                            <SelectItem key={provider.id} value={provider.id}>
+                              {provider.name} ({provider.type})
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />

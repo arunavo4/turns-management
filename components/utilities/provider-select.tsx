@@ -126,12 +126,17 @@ export function ProviderSelect({
           <SelectValue placeholder={isLoading ? "Loading..." : placeholder} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">No Provider</SelectItem>
-          {filteredProviders.map((provider) => (
-            <SelectItem key={provider.id} value={provider.id}>
-              {provider.name} ({provider.type})
-            </SelectItem>
-          ))}
+          {filteredProviders.length === 0 ? (
+            <div className="p-2 text-sm text-muted-foreground">
+              No providers available. Click + to add one.
+            </div>
+          ) : (
+            filteredProviders.map((provider) => (
+              <SelectItem key={provider.id} value={provider.id}>
+                {provider.name} ({provider.type})
+              </SelectItem>
+            ))
+          )}
         </SelectContent>
       </Select>
 
